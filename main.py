@@ -3,7 +3,7 @@ import requests
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
-# Load .env variables (locally or from GitHub Secrets)
+# Load environment variables
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -16,28 +16,38 @@ if not all([SUPABASE_URL, SUPABASE_KEY, USERNAME, PASSWORD]):
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Pull MA utilities
 API_URL = "https://secure.rateacuity.com/RateAcuityJSONAPI/api/utility/MA"
 params = {"p1": USERNAME, "p2": PASSWORD}
 
 try:
     response = requests.get(API_URL, params=params)
     print("Status code:", response.status_code)
+    print("Raw response text preview:")
+    print(response.text[:500])  # Preview response
+
     response.raise_for_status()
 
-    data = response.json()
-    utilities = data.get("Utility", [])
+    try:
+        data = response.json()
+    except Exception as json_error:
+        raise ValueError(f"Failed to parse JSON: {json_error}")
 
-    if not utilities:
-        raise ValueError("No utilities returned in response.")
+    if not data or "Utility" not in data:
+        raise ValueError("No 'Utility' key in API response or response is null.")
 
-    # Filter for Eversource and National Grid
+    utilities = data["Utility"]
+
+    # Filter for Eversource + National Grid + Western MA Electric
     filtered_utilities = [
         u for u in utilities
-        if "Eversource" in u["UtilityName"] or "National Grid" in u["UtilityName"]
+        if any(name in u["UtilityName"] for name in [
+            "Eversource",
+            "National Grid",
+            "Western Massachusetts Electric Company"
+        ])
     ]
 
-    print(f"Found {len(filtered_utilities)} Eversource/National Grid utilities in MA.")
+    print(f"Found {len(filtered_utilities)} matching utilities in MA.")
 
     for util in filtered_utilities:
         data = {
@@ -45,7 +55,7 @@ try:
             "UtilityName": util["UtilityName"],
             "State": util["State"]
         }
-        result = supabase.table("Utility").upsert(data).execute()
+        supabase.table("Utility").upsert(data).execute()
         print(f"Upserted: {data}")
 
 except Exception as e:
