@@ -3,26 +3,40 @@ import requests
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
-# Load environment variables from .env file (for local runs)
+# Load environment variables from .env
 load_dotenv()
 
-SUPABASE_URL = os.getenv("https://woylxuwhzlbkufgklcto.supabase.co")
-SUPABASE_KEY = os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndveWx4dXdoemxia3VmZ2tsY3RvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM1NDgxMTgsImV4cCI6MjA1OTEyNDExOH0.9bt8CQQcVTp01jCbJeuvhsB7oNlaLI63W6uEPOHNYiE")
-USERNAME = os.getenv("martin@opt-apps.com")
-PASSWORD = os.getenv("Power200")
+# --- ENVIRONMENT VARIABLES ---
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+USERNAME = os.getenv("RATEACUITY_USERNAME")
+PASSWORD = os.getenv("RATEACUITY_PASSWORD")
 
+# --- CHECK FOR MISSING CONFIG ---
+if not all([SUPABASE_URL, SUPABASE_KEY, USERNAME, PASSWORD]):
+    raise ValueError("Missing one or more environment variables. Please check your .env file.")
+
+# --- INITIALIZE SUPABASE CLIENT ---
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-API_URL = "https://secure.rateacuity.com/RateAcuityJSONAPI/api/utility/CT"
+# --- RATEACUITY API REQUEST FOR MA UTILITIES ---
+API_URL = "https://secure.rateacuity.com/RateAcuityJSONAPI/api/utility/MA"
+params = {"p1": USERNAME, "p2": PASSWORD}
 
-response = requests.get(API_URL, params={"p1": USERNAME, "p2": PASSWORD})
-
-if response.status_code == 200:
+try:
+    response = requests.get(API_URL, params=params)
+    response.raise_for_status()  # raise an error for bad status codes
     utilities = response.json()
+
+    print(f"Fetched {len(utilities)} utilities from RateAcuity for MA.")
+
     for util in utilities:
         utility_id = util.get("UtilityID")
         utility_name = util.get("UtilityName")
         state = util.get("State")
+
+        if not utility_id or not utility_name:
+            continue  # Skip invalid records
 
         data = {
             "UtilityID": utility_id,
@@ -31,7 +45,9 @@ if response.status_code == 200:
         }
 
         result = supabase.table("Utility").upsert(data).execute()
-        print(f"Inserted: {utility_id} - {utility_name}")
-else:
-    print(f"Failed to fetch data: {response.status_code} - {response.text}")
+        print(f"Upserted: {utility_id} - {utility_name}")
 
+except requests.RequestException as e:
+    print(f"Failed to fetch data from RateAcuity: {e}")
+except Exception as e:
+    print(f"Unexpected error: {e}")
