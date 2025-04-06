@@ -1,3 +1,0 @@
-supabase
-requests
-python-dotenv
