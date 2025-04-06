@@ -3,56 +3,53 @@ import requests
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
-# Load environment variables (used locally only)
+# Load environment variables locally
 load_dotenv()
 
-# --- Load Secrets from Environment ---
+# Get credentials from env
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 USERNAME = os.getenv("RATEACUITY_USERNAME")
 PASSWORD = os.getenv("RATEACUITY_PASSWORD")
 
-# --- Validate secrets ---
+# Validate environment
 if not all([SUPABASE_URL, SUPABASE_KEY, USERNAME, PASSWORD]):
-    raise ValueError("One or more environment variables are missing.")
+    raise ValueError("Missing one or more environment variables")
 
-# --- Initialize Supabase client ---
+# Init Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- Set up RateAcuity request ---
-API_URL = "https://secure.rateacuity.com/RateAcuityJSONAPI/api/utility/MA"
+# Call the generic /utility endpoint (no state filter)
+API_URL = "https://secure.rateacuity.com/RateAcuityJSONAPI/api/utility"
 params = {"p1": USERNAME, "p2": PASSWORD}
 
 try:
     response = requests.get(API_URL, params=params)
     print("Status code:", response.status_code)
-
-    # TEMP: log the raw response
-    print("Raw response text:")
-    print(response.text)
+    print("Raw response preview (first 500 chars):")
+    print(response.text[:500])  # Short preview only
 
     response.raise_for_status()
     utilities = response.json()
 
-    if not utilities:
-        raise ValueError("RateAcuity returned no data or invalid format.")
+    if not utilities or not isinstance(utilities, list):
+        raise ValueError("RateAcuity returned no data or unexpected format.")
 
-    # --- Filter for Eversource only ---
+    # Filter for Eversource in MA
     filtered_utilities = [
         u for u in utilities
         if u.get("State") == "MA" and "Eversource" in u.get("UtilityName", "")
     ]
 
-    print(f"Filtered down to {len(filtered_utilities)} Eversource utilities in MA")
+    print(f"Found {len(filtered_utilities)} Eversource utilities in MA.")
 
-    # --- Upsert into Supabase ---
     for util in filtered_utilities:
         utility_id = util.get("UtilityID")
         utility_name = util.get("UtilityName")
         state = util.get("State")
 
         if not utility_id or not utility_name:
-            continue  # Skip incomplete entries
+            continue  # Skip if incomplete
 
         data = {
             "UtilityID": utility_id,
