@@ -3,40 +3,56 @@ import requests
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
-# Load environment variables from .env
+# Load environment variables (used locally only)
 load_dotenv()
 
-# --- ENVIRONMENT VARIABLES ---
+# --- Load Secrets from Environment ---
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 USERNAME = os.getenv("RATEACUITY_USERNAME")
 PASSWORD = os.getenv("RATEACUITY_PASSWORD")
 
-# --- CHECK FOR MISSING CONFIG ---
+# --- Validate secrets ---
 if not all([SUPABASE_URL, SUPABASE_KEY, USERNAME, PASSWORD]):
-    raise ValueError("Missing one or more environment variables. Please check your .env file.")
+    raise ValueError("One or more environment variables are missing.")
 
-# --- INITIALIZE SUPABASE CLIENT ---
+# --- Initialize Supabase client ---
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- RATEACUITY API REQUEST FOR MA UTILITIES ---
+# --- Set up RateAcuity request ---
 API_URL = "https://secure.rateacuity.com/RateAcuityJSONAPI/api/utility/MA"
 params = {"p1": USERNAME, "p2": PASSWORD}
 
 try:
     response = requests.get(API_URL, params=params)
-    response.raise_for_status()  # raise an error for bad status codes
+    print("Status code:", response.status_code)
+
+    # TEMP: log the raw response
+    print("Raw response text:")
+    print(response.text)
+
+    response.raise_for_status()
     utilities = response.json()
 
-    print(f"Fetched {len(utilities)} utilities from RateAcuity for MA.")
+    if not utilities:
+        raise ValueError("RateAcuity returned no data or invalid format.")
 
-    for util in utilities:
+    # --- Filter for Eversource only ---
+    filtered_utilities = [
+        u for u in utilities
+        if u.get("State") == "MA" and "Eversource" in u.get("UtilityName", "")
+    ]
+
+    print(f"Filtered down to {len(filtered_utilities)} Eversource utilities in MA")
+
+    # --- Upsert into Supabase ---
+    for util in filtered_utilities:
         utility_id = util.get("UtilityID")
         utility_name = util.get("UtilityName")
         state = util.get("State")
 
         if not utility_id or not utility_name:
-            continue  # Skip invalid records
+            continue  # Skip incomplete entries
 
         data = {
             "UtilityID": utility_id,
@@ -47,7 +63,5 @@ try:
         result = supabase.table("Utility").upsert(data).execute()
         print(f"Upserted: {utility_id} - {utility_name}")
 
-except requests.RequestException as e:
-    print(f"Failed to fetch data from RateAcuity: {e}")
 except Exception as e:
-    print(f"Unexpected error: {e}")
+    print("Unexpected error:", e)
