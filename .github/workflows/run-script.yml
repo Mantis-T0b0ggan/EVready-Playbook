@@ -1,0 +1,29 @@
+name: Run RateAcuity → Supabase Script
+
+on:
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.10
+
+      - name: Install Python packages
+        run: |
+          pip install requests python-dotenv supabase
+
+      - name: Run main.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          RATEACUITY_USERNAME: ${{ secrets.RATEACUITY_USERNAME }}
+          RATEACUITY_PASSWORD: ${{ secrets.RATEACUITY_PASSWORD }}
+        run: python main.py
