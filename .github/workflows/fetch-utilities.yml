@@ -1,7 +1,7 @@
 name: Fetch Utilities from RateAcuity
 
 on:
-  workflow_dispatch: # Run manually from GitHub UI
+  workflow_dispatch: # Allows you to run this manually from GitHub
 
 jobs:
   fetch-and-insert:
@@ -25,4 +25,6 @@ jobs:
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         RATE_ACUITY_USERNAME: ${{ secrets.RATE_ACUITY_USERNAME }}
         RATE_ACUITY_PASSWORD: ${{ secrets.RATE_ACUITY_PASSWORD }}
-      run: python main.py
+      run: |
+        echo "🔎 Debug: SUPABASE_URL=${SUPABASE_URL}"
+        python main.py
