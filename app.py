@@ -94,8 +94,11 @@ def calculate_bill():
         energy_data = supabase.table("EnergyTime_Table").select("*").eq("ScheduleID", schedule_id).execute().data
         energy_charge = 0.0
         for row in energy_data:
-            rate = float(row.get("RatekWH", 0))  # Updated field
-            energy_charge += usage_kwh * rate
+            try:
+                rate = float(row.get("RatekWH", 0))
+                energy_charge += usage_kwh * rate
+            except (TypeError, ValueError):
+                continue
         breakdown["Energy Charges"] = energy_charge
         total_cost += energy_charge
 
@@ -111,22 +114,21 @@ def calculate_bill():
         breakdown["Demand Charges"] = demand_charge
         total_cost += demand_charge
 
-
         # --- SERVICE CHARGES ---
         service_data = supabase.table("ServiceCharge_Table").select("*").eq("ScheduleID", schedule_id).execute().data
         service_charge = 0.0
         for row in service_data:
-            rate = float(row.get("Rate", 0))  # Confirmed field
-            service_charge += rate * (billing_days / 30)
+            try:
+                rate = float(row.get("Rate", 0))
+                service_charge += rate * (billing_days / 30)
+            except (TypeError, ValueError):
+                continue
         breakdown["Service Charges"] = service_charge
         total_cost += service_charge
 
         # --- OTHER CHARGES ---
         other_data = supabase.table("OtherCharges_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        other_charge = 0.0
-        for row in other_data:
-            # Placeholder: no dollar field confirmed, keeping zero unless known
-            pass
+        other_charge = 0.0  # Skipping for now (no amount field confirmed)
         breakdown["Other Charges"] = other_charge
 
         return jsonify({
