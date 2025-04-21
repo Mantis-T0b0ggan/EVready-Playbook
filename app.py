@@ -54,7 +54,7 @@ def get_schedule_details():
         detail_tables = [
             "Demand_Table",
             "DemandTime_Table",
-            "Energy_Table"
+            "Energy_Table",
             "EnergyTime_Table",
             "IncrementalDemand_Table",
             "IncrementalEnergy_Table",
