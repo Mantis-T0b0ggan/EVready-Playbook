@@ -1,10 +1,56 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Customer Bill Estimator</title>
+  <title>EVReady Utility Bill Estimator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 600px;
+      margin: auto;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+    }
+    input, select {
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: #0072CE;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
-  <h1>EVReady Utility Bill Estimator</h1>
-  <p>This app will help estimate customer electric bills using database data.</p>
+  <h2>EVReady Utility Bill Estimator</h2>
+
+  <form method="POST" action="/estimate">
+    <label for="state">Select State:</label>
+    <select name="state" required>
+      <option value="">-- Select a State --</option>
+      <option value="MA">Massachusetts</option>
+      <option value="CA">California</option>
+      <option value="NY">New York</option>
+      <!-- Add more states here -->
+    </select>
+
+    <label for="utility_id">Utility ID:</label>
+    <input type="text" name="utility_id" placeholder="e.g. 1" required />
+
+    <label for="monthly_kwh">Monthly Usage (kWh):</label>
+    <input type="number" name="monthly_kwh" placeholder="e.g. 1200" required />
+
+    <label for="demand_kw">Monthly Demand (kW):</label>
+    <input type="number" name="demand_kw" placeholder="e.g. 50" />
+
+    <button type="submit">Estimate Bill</button>
+  </form>
 </body>
 </html>
