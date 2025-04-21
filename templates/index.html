@@ -1,129 +1,159 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
   <title>EVReady Utility Bill Estimator</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      margin: 40px;
+      margin: 30px;
     }
     h1 {
-      color: #1c2b4a;
+      color: #1B2A49;
     }
     label {
       display: block;
-      margin-top: 20px;
+      margin-top: 15px;
     }
     select, input {
-      padding: 6px;
-      margin-top: 5px;
+      padding: 8px;
       width: 300px;
     }
     button {
       margin-top: 20px;
-      padding: 10px 20px;
-      background-color: #1c2b4a;
+      padding: 10px 15px;
+      background-color: #1B2A49;
       color: white;
       border: none;
       cursor: pointer;
     }
-    #result {
-      margin-top: 30px;
+    .hidden {
+      display: none;
+    }
+    .result {
+      margin-top: 20px;
+      background-color: #f2f2f2;
       padding: 15px;
-      background: #f2f2f2;
-      width: 500px;
     }
   </style>
 </head>
 <body>
-  <h1>EVReady Utility Bill Estimator</h1>
 
-  <label>Select a State:</label>
-  <select id="stateDropdown"></select>
+<h1>EVReady Utility Bill Estimator</h1>
 
-  <label>Select a Utility:</label>
-  <select id="utilityDropdown"></select>
+<label for="state">Select a State:</label>
+<select id="state"></select>
 
-  <label>Select a Schedule:</label>
-  <select id="scheduleDropdown"></select>
+<label for="utility">Select a Utility:</label>
+<select id="utility"></select>
 
-  <label>Monthly kWh Usage:</label>
-  <input type="number" id="kwhUsage" placeholder="e.g. 1200">
+<label for="schedule">Select a Schedule:</label>
+<select id="schedule"></select>
 
-  <label>Monthly kW Demand:</label>
-  <input type="number" id="kwDemand" placeholder="e.g. 50">
+<div id="input-fields">
+  <div id="kwh-section" class="hidden">
+    <label for="kwh">Monthly kWh Usage:</label>
+    <input type="number" id="kwh">
+  </div>
 
-  <label>Billing Days:</label>
-  <input type="number" id="billingDays" placeholder="e.g. 30">
+  <div id="kw-section" class="hidden">
+    <label for="kw">Monthly kW Demand:</label>
+    <input type="number" id="kw">
+  </div>
 
-  <button onclick="calculateBill()">Estimate Bill</button>
+  <div id="days-section" class="hidden">
+    <label for="days">Billing Days:</label>
+    <input type="number" id="days">
+  </div>
+</div>
 
-  <div id="result"></div>
+<button id="submitBtn">Estimate Bill</button>
 
-  <script>
-    async function fetchStates() {
-      const res = await fetch("/states");
-      const states = await res.json();
-      const dropdown = document.getElementById("stateDropdown");
-      dropdown.innerHTML = `<option value="">Select state</option>`;
-      states.forEach(state => {
-        dropdown.innerHTML += `<option value="${state}">${state}</option>`;
-      });
-    }
+<div class="result" id="resultBox"></div>
 
-    async function fetchUtilities() {
-      const state = document.getElementById("stateDropdown").value;
-      const res = await fetch(`/utilities?state=${state}`);
-      const utilities = await res.json();
-      const dropdown = document.getElementById("utilityDropdown");
-      dropdown.innerHTML = `<option value="">Select utility</option>`;
-      utilities.forEach(util => {
-        dropdown.innerHTML += `<option value="${util.UtilityID}">${util.UtilityName}</option>`;
-      });
-    }
+<script>
+  async function fetchStates() {
+    const res = await fetch('/states');
+    const states = await res.json();
+    const select = document.getElementById('state');
+    select.innerHTML = '<option value="">-- Select --</option>';
+    states.forEach(state => {
+      select.innerHTML += `<option value="${state}">${state}</option>`;
+    });
+  }
 
-    async function fetchSchedules() {
-      const utilityID = document.getElementById("utilityDropdown").value;
-      const res = await fetch(`/schedules?utility_id=${utilityID}`);
-      const schedules = await res.json();
-      const dropdown = document.getElementById("scheduleDropdown");
-      dropdown.innerHTML = `<option value="">Select schedule</option>`;
-      schedules.forEach(sch => {
-        dropdown.innerHTML += `<option value="${sch.ScheduleID}">${sch.ScheduleName}</option>`;
-      });
-    }
+  async function fetchUtilities(state) {
+    const res = await fetch(`/utilities?state=${state}`);
+    const data = await res.json();
+    const select = document.getElementById('utility');
+    select.innerHTML = '<option value="">-- Select --</option>';
+    data.forEach(util => {
+      select.innerHTML += `<option value="${util.UtilityID}">${util.UtilityName}</option>`;
+    });
+  }
 
-    async function calculateBill() {
-      const scheduleID = document.getElementById("scheduleDropdown").value;
-      const kwh = parseFloat(document.getElementById("kwhUsage").value);
-      const kw = parseFloat(document.getElementById("kwDemand").value);
-      const days = parseInt(document.getElementById("billingDays").value);
+  async function fetchSchedules(utilityID) {
+    const res = await fetch(`/schedules?utility_id=${utilityID}`);
+    const data = await res.json();
+    const select = document.getElementById('schedule');
+    select.innerHTML = '<option value="">-- Select --</option>';
+    data.forEach(sch => {
+      select.innerHTML += `<option value="${sch.ScheduleID}">${sch.ScheduleName}</option>`;
+    });
+  }
 
-      if (!scheduleID || isNaN(kwh) || isNaN(kw) || isNaN(days)) {
-        document.getElementById("result").innerText = "Please fill in all fields.";
-        return;
-      }
+  async function fetchScheduleDetails(scheduleID) {
+    const res = await fetch(`/schedule_details?schedule_id=${scheduleID}`);
+    const data = await res.json();
+    console.log("Schedule detail response:", data);
 
-      const res = await fetch(`/calculate_bill?schedule_id=${scheduleID}&kwh=${kwh}&kw=${kw}&days=${days}`);
-      const data = await res.json();
+    const tables = data.present_tables || [];
 
-      if (data.error) {
-        document.getElementById("result").innerText = "Error: " + data.error;
-      } else {
-        document.getElementById("result").innerHTML = `
-          <strong>Estimated Monthly Bill:</strong> $${data.total.toFixed(2)}<br>
-          Breakdown:<br>
-          Energy: $${data.energy.toFixed(2)}<br>
-          Demand: $${data.demand.toFixed(2)}<br>
-          Fixed Charges: $${data.fixed.toFixed(2)}<br>
-        `;
-      }
-    }
+    document.getElementById('kwh-section').classList.toggle('hidden', !tables.includes("EnergyTime_Table"));
+    document.getElementById('kw-section').classList.toggle('hidden', !tables.includes("DemandTime_Table"));
+    document.getElementById('days-section').classList.toggle('hidden', !tables.includes("ServiceCharge_Table"));
+  }
 
-    document.getElementById("stateDropdown").addEventListener("change", fetchUtilities);
-    document.getElementById("utilityDropdown").addEventListener("change", fetchSchedules);
+  document.getElementById('state').addEventListener('change', e => {
+    const state = e.target.value;
+    fetchUtilities(state);
+    document.getElementById('utility').innerHTML = '';
+    document.getElementById('schedule').innerHTML = '';
+    document.getElementById('input-fields').classList.add('hidden');
+  });
 
-    fetchStates();
-  </script>
+  document.getElementById('utility').addEventListener('change', e => {
+    const utilityID = e.target.value;
+    fetchSchedules(utilityID);
+  });
+
+  document.getElementById('schedule').addEventListener('change', e => {
+    const scheduleID = e.target.value;
+    fetchScheduleDetails(scheduleID);
+  });
+
+  document.getElementById('submitBtn').addEventListener('click', () => {
+    const state = document.getElementById('state').value;
+    const utility = document.getElementById('utility').value;
+    const schedule = document.getElementById('schedule').value;
+    const kwh = document.getElementById('kwh').value;
+    const kw = document.getElementById('kw').value;
+    const days = document.getElementById('days').value;
+
+    const resultBox = document.getElementById('resultBox');
+    resultBox.innerHTML = `
+      <strong>State:</strong> ${state}<br>
+      <strong>Utility ID:</strong> ${utility}<br>
+      <strong>Schedule ID:</strong> ${schedule}<br>
+      <strong>Usage:</strong> ${kwh || "n/a"} kWh<br>
+      <strong>Demand:</strong> ${kw || "n/a"} kW<br>
+      <strong>Days:</strong> ${days || "n/a"} days<br>
+      <br><em>⚙️ Next: Hook up billing calculation using Supabase data.</em>
+    `;
+  });
+
+  fetchStates();
+</script>
+
 </body>
 </html>
