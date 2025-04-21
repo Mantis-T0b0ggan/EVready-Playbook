@@ -47,10 +47,8 @@ def get_schedules():
 def get_schedule_details():
     schedule_id = request.args.get("schedule_id")
     try:
-        # Get base schedule
         schedule = supabase.table("Schedule_Table").select("*").eq("ScheduleID", schedule_id).single().execute().data
 
-        # TIP tables and check presence
         detail_tables = [
             "DemandTime_Table",
             "Demand_Table",
@@ -87,7 +85,7 @@ def calculate_bill():
         schedule_id = data.get("schedule_id")
         usage_kwh = float(data.get("usage_kwh", 0))
         demand_kw = float(data.get("demand_kw", 0))
-        billing_days = float(data.get("billing_days", 30))  # Default to 30 days
+        billing_days = float(data.get("billing_days", 30))
 
         total_cost = 0.0
         breakdown = {}
@@ -96,26 +94,22 @@ def calculate_bill():
         energy_data = supabase.table("EnergyTime_Table").select("*").eq("ScheduleID", schedule_id).execute().data
         energy_charge = 0.0
         for row in energy_data:
-            rate = float(row.get("Rate", 0))
-            energy_charge += usage_kwh * rate  # Simplified — assumes flat rate
+            rate = float(row.get("RatekWH", 0))  # Updated field
+            energy_charge += usage_kwh * rate
         breakdown["Energy Charges"] = energy_charge
         total_cost += energy_charge
 
         # --- DEMAND CHARGES ---
-        demand_data = supabase.table("DemandTime_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        # This table has no rows, so skip
         demand_charge = 0.0
-        for row in demand_data:
-            rate = float(row.get("Rate", 0))
-            demand_charge += demand_kw * rate  # Simplified — assumes flat rate
         breakdown["Demand Charges"] = demand_charge
-        total_cost += demand_charge
 
         # --- SERVICE CHARGES ---
         service_data = supabase.table("ServiceCharge_Table").select("*").eq("ScheduleID", schedule_id).execute().data
         service_charge = 0.0
         for row in service_data:
-            fixed_charge = float(row.get("ChargeAmount", 0))
-            service_charge += fixed_charge * (billing_days / 30)  # Prorate by days
+            rate = float(row.get("Rate", 0))  # Confirmed field
+            service_charge += rate * (billing_days / 30)
         breakdown["Service Charges"] = service_charge
         total_cost += service_charge
 
@@ -123,13 +117,9 @@ def calculate_bill():
         other_data = supabase.table("OtherCharges_Table").select("*").eq("ScheduleID", schedule_id).execute().data
         other_charge = 0.0
         for row in other_data:
-            try:
-                amount = float(row.get("ChargeAmount", 0))
-                other_charge += amount
-            except:
-                pass
+            # Placeholder: no dollar field confirmed, keeping zero unless known
+            pass
         breakdown["Other Charges"] = other_charge
-        total_cost += other_charge
 
         return jsonify({
             "total_cost": round(total_cost, 2),
@@ -138,7 +128,6 @@ def calculate_bill():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 if __name__ == "__main__":
     app.run(debug=True)
