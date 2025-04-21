@@ -100,9 +100,17 @@ def calculate_bill():
         total_cost += energy_charge
 
         # --- DEMAND CHARGES ---
-        # This table has no rows, so skip
+        demand_data = supabase.table("Demand_Table").select("*").eq("ScheduleID", schedule_id).execute().data
         demand_charge = 0.0
+        for row in demand_data:
+            try:
+                rate = float(row.get("RatekW", 0))
+                demand_charge += demand_kw * rate
+            except (TypeError, ValueError):
+                continue
         breakdown["Demand Charges"] = demand_charge
+        total_cost += demand_charge
+
 
         # --- SERVICE CHARGES ---
         service_data = supabase.table("ServiceCharge_Table").select("*").eq("ScheduleID", schedule_id).execute().data
