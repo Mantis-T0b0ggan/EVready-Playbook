@@ -1,56 +1,141 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>EVReady Utility Bill Estimator</title>
+  <title>EVready Bill Estimator</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      padding: 20px;
-      max-width: 600px;
-      margin: auto;
+      padding: 40px;
+      background-color: #f4f7f9;
+    }
+    h1 {
+      color: #1a2a4f;
     }
     label {
-      display: block;
-      margin-top: 10px;
+      font-weight: bold;
     }
-    input, select {
-      width: 100%;
+    select, input {
+      width: 300px;
       padding: 8px;
-      margin-top: 4px;
+      margin-bottom: 20px;
+      display: block;
     }
     button {
-      margin-top: 20px;
       padding: 10px 20px;
-      background-color: #0072CE;
-      color: white;
+      background-color: #1a2a4f;
+      color: #fff;
       border: none;
       cursor: pointer;
+    }
+    #result {
+      margin-top: 30px;
+      font-size: 18px;
+      font-weight: bold;
     }
   </style>
 </head>
 <body>
-  <h2>EVReady Utility Bill Estimator</h2>
 
-  <form method="POST" action="/estimate">
-    <label for="state">Select State:</label>
-    <select name="state" required>
-      <option value="">-- Select a State --</option>
-      <option value="MA">Massachusetts</option>
-      <option value="CA">California</option>
-      <option value="NY">New York</option>
-      <!-- Add more states here -->
-    </select>
+  <h1>EVready Monthly Bill Estimator</h1>
 
-    <label for="utility_id">Utility ID:</label>
-    <input type="text" name="utility_id" placeholder="e.g. 1" required />
+  <label for="state">Select State</label>
+  <select id="state">
+    <option value="">-- Select a state --</option>
+  </select>
 
-    <label for="monthly_kwh">Monthly Usage (kWh):</label>
-    <input type="number" name="monthly_kwh" placeholder="e.g. 1200" required />
+  <label for="utility">Select Utility</label>
+  <select id="utility">
+    <option value="">-- Select a utility --</option>
+  </select>
 
-    <label for="demand_kw">Monthly Demand (kW):</label>
-    <input type="number" name="demand_kw" placeholder="e.g. 50" />
+  <label for="schedule">Select Schedule</label>
+  <select id="schedule">
+    <option value="">-- Select a schedule --</option>
+  </select>
 
-    <button type="submit">Estimate Bill</button>
-  </form>
+  <label for="usage">Monthly Usage (kWh)</label>
+  <input type="number" id="usage" placeholder="e.g. 1243.75">
+
+  <label for="demand">Monthly Demand (kW)</label>
+  <input type="number" id="demand" placeholder="e.g. 45.1">
+
+  <button onclick="calculateBill()">Estimate Monthly Bill</button>
+
+  <div id="result"></div>
+
+  <script>
+    async function fetchStates() {
+      const res = await fetch("/states");
+      const data = await res.json();
+      const dropdown = document.getElementById("state");
+
+      data.forEach(state => {
+        const option = document.createElement("option");
+        option.value = state;
+        option.textContent = state;
+        dropdown.appendChild(option);
+      });
+    }
+
+    async function fetchUtilities(state) {
+      const res = await fetch(`/utilities_by_state?state=${state}`);
+      const data = await res.json();
+      const dropdown = document.getElementById("utility");
+      dropdown.innerHTML = '<option value="">-- Select a utility --</option>';
+      document.getElementById("schedule").innerHTML = '<option value="">-- Select a schedule --</option>';
+
+      data.forEach(util => {
+        const option = document.createElement("option");
+        option.value = util.UtilityID;
+        option.textContent = util.UtilityName;
+        dropdown.appendChild(option);
+      });
+    }
+
+    async function fetchSchedules(utilityId) {
+      const res = await fetch(`/schedules_by_utility?utility_id=${utilityId}`);
+      const data = await res.json();
+      const dropdown = document.getElementById("schedule");
+      dropdown.innerHTML = '<option value="">-- Select a schedule --</option>';
+
+      data.forEach(schedule => {
+        const option = document.createElement("option");
+        option.value = schedule.ScheduleID;
+        option.textContent = schedule.ScheduleName;
+        dropdown.appendChild(option);
+      });
+    }
+
+    async function calculateBill() {
+      const scheduleId = document.getElementById("schedule").value;
+      const usage = parseFloat(document.getElementById("usage").value);
+      const demand = parseFloat(document.getElementById("demand").value);
+
+      if (!scheduleId || isNaN(usage) || isNaN(demand)) {
+        document.getElementById("result").textContent = "Please complete all fields.";
+        return;
+      }
+
+      const res = await fetch(`/calculate_bill?schedule_id=${scheduleId}&usage=${usage}&demand=${demand}`);
+      const data = await res.json();
+
+      if (data.error) {
+        document.getElementById("result").textContent = `Error: ${data.error}`;
+      } else {
+        document.getElementById("result").textContent = `Estimated Monthly Bill: $${data.estimated_bill.toFixed(2)}`;
+      }
+    }
+
+    document.getElementById("state").addEventListener("change", function () {
+      fetchUtilities(this.value);
+    });
+
+    document.getElementById("utility").addEventListener("change", function () {
+      fetchSchedules(this.value);
+    });
+
+    fetchStates();
+  </script>
+
 </body>
 </html>
