@@ -61,7 +61,7 @@
     <input type="number" id="kwh">
   </div>
 
-  <div id="kw-section" class="hidden">
+  <div id="kw-section">
     <label for="kw">Monthly kW Demand:</label>
     <input type="number" id="kw">
   </div>
@@ -115,8 +115,10 @@
     const tables = data.present_tables || [];
 
     document.getElementById('kwh-section').classList.toggle('hidden', !tables.includes("EnergyTime_Table"));
-    document.getElementById('kw-section').classList.toggle('hidden', !tables.includes("DemandTime_Table"));
     document.getElementById('days-section').classList.toggle('hidden', !tables.includes("ServiceCharge_Table"));
+
+    // Always show kW input for now
+    document.getElementById('kw-section').classList.remove('hidden');
   }
 
   document.getElementById('state').addEventListener('change', e => {
@@ -192,7 +194,6 @@
     }
   });
 
-  // Init
   fetchStates();
 </script>
 
