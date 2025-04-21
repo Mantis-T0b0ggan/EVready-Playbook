@@ -1,141 +1,154 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>EVready Bill Estimator</title>
+  <title>EVready Utility Schedule Viewer</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      padding: 40px;
-      background-color: #f4f7f9;
+      margin: 40px;
+      background-color: #f5f5f5;
     }
-    h1 {
-      color: #1a2a4f;
+    select, button {
+      font-size: 16px;
+      padding: 8px;
+      margin: 10px 0;
     }
     label {
       font-weight: bold;
     }
-    select, input {
-      width: 300px;
-      padding: 8px;
+    #scheduleOutput {
+      margin-top: 20px;
+      padding: 15px;
+      background: white;
+      border: 1px solid #ccc;
+    }
+    .dropdown-group {
       margin-bottom: 20px;
-      display: block;
-    }
-    button {
-      padding: 10px 20px;
-      background-color: #1a2a4f;
-      color: #fff;
-      border: none;
-      cursor: pointer;
-    }
-    #result {
-      margin-top: 30px;
-      font-size: 18px;
-      font-weight: bold;
     }
   </style>
 </head>
 <body>
+  <h1>Utility Schedule Viewer</h1>
 
-  <h1>EVready Monthly Bill Estimator</h1>
+  <div class="dropdown-group">
+    <label for="state">Select State:</label><br>
+    <select id="stateDropdown">
+      <option value="">-- Choose a state --</option>
+    </select>
+  </div>
 
-  <label for="state">Select State</label>
-  <select id="state">
-    <option value="">-- Select a state --</option>
-  </select>
+  <div class="dropdown-group">
+    <label for="utility">Select Utility:</label><br>
+    <select id="utilityDropdown" disabled>
+      <option value="">-- Choose a utility --</option>
+    </select>
+  </div>
 
-  <label for="utility">Select Utility</label>
-  <select id="utility">
-    <option value="">-- Select a utility --</option>
-  </select>
+  <div class="dropdown-group">
+    <label for="schedule">Select Schedule:</label><br>
+    <select id="scheduleDropdown" disabled>
+      <option value="">-- Choose a schedule --</option>
+    </select>
+  </div>
 
-  <label for="schedule">Select Schedule</label>
-  <select id="schedule">
-    <option value="">-- Select a schedule --</option>
-  </select>
+  <button id="viewBtn" disabled>View Schedule Details</button>
 
-  <label for="usage">Monthly Usage (kWh)</label>
-  <input type="number" id="usage" placeholder="e.g. 1243.75">
-
-  <label for="demand">Monthly Demand (kW)</label>
-  <input type="number" id="demand" placeholder="e.g. 45.1">
-
-  <button onclick="calculateBill()">Estimate Monthly Bill</button>
-
-  <div id="result"></div>
+  <div id="scheduleOutput"></div>
 
   <script>
-    async function fetchStates() {
-      const res = await fetch("/states");
-      const data = await res.json();
-      const dropdown = document.getElementById("state");
+    const stateDropdown = document.getElementById('stateDropdown');
+    const utilityDropdown = document.getElementById('utilityDropdown');
+    const scheduleDropdown = document.getElementById('scheduleDropdown');
+    const viewBtn = document.getElementById('viewBtn');
+    const output = document.getElementById('scheduleOutput');
 
-      data.forEach(state => {
-        const option = document.createElement("option");
-        option.value = state;
-        option.textContent = state;
-        dropdown.appendChild(option);
+    // Load states
+    fetch("/states")
+      .then(res => res.json())
+      .then(states => {
+        states.forEach(state => {
+          const option = document.createElement('option');
+          option.value = state;
+          option.textContent = state;
+          stateDropdown.appendChild(option);
+        });
       });
-    }
 
-    async function fetchUtilities(state) {
-      const res = await fetch(`/utilities_by_state?state=${state}`);
-      const data = await res.json();
-      const dropdown = document.getElementById("utility");
-      dropdown.innerHTML = '<option value="">-- Select a utility --</option>';
-      document.getElementById("schedule").innerHTML = '<option value="">-- Select a schedule --</option>';
+    // When state changes, get utilities
+    stateDropdown.addEventListener("change", () => {
+      const state = stateDropdown.value;
+      utilityDropdown.innerHTML = '<option value="">-- Choose a utility --</option>';
+      scheduleDropdown.innerHTML = '<option value="">-- Choose a schedule --</option>';
+      utilityDropdown.disabled = true;
+      scheduleDropdown.disabled = true;
+      viewBtn.disabled = true;
+      output.innerHTML = "";
 
-      data.forEach(util => {
-        const option = document.createElement("option");
-        option.value = util.UtilityID;
-        option.textContent = util.UtilityName;
-        dropdown.appendChild(option);
-      });
-    }
+      if (!state) return;
 
-    async function fetchSchedules(utilityId) {
-      const res = await fetch(`/schedules_by_utility?utility_id=${utilityId}`);
-      const data = await res.json();
-      const dropdown = document.getElementById("schedule");
-      dropdown.innerHTML = '<option value="">-- Select a schedule --</option>';
-
-      data.forEach(schedule => {
-        const option = document.createElement("option");
-        option.value = schedule.ScheduleID;
-        option.textContent = schedule.ScheduleName;
-        dropdown.appendChild(option);
-      });
-    }
-
-    async function calculateBill() {
-      const scheduleId = document.getElementById("schedule").value;
-      const usage = parseFloat(document.getElementById("usage").value);
-      const demand = parseFloat(document.getElementById("demand").value);
-
-      if (!scheduleId || isNaN(usage) || isNaN(demand)) {
-        document.getElementById("result").textContent = "Please complete all fields.";
-        return;
-      }
-
-      const res = await fetch(`/calculate_bill?schedule_id=${scheduleId}&usage=${usage}&demand=${demand}`);
-      const data = await res.json();
-
-      if (data.error) {
-        document.getElementById("result").textContent = `Error: ${data.error}`;
-      } else {
-        document.getElementById("result").textContent = `Estimated Monthly Bill: $${data.estimated_bill.toFixed(2)}`;
-      }
-    }
-
-    document.getElementById("state").addEventListener("change", function () {
-      fetchUtilities(this.value);
+      fetch(`/utilities_by_state?state=${state}`)
+        .then(res => res.json())
+        .then(data => {
+          data.forEach(util => {
+            const opt = document.createElement('option');
+            opt.value = util.UtilityID;
+            opt.textContent = util.UtilityName;
+            utilityDropdown.appendChild(opt);
+          });
+          utilityDropdown.disabled = false;
+        });
     });
 
-    document.getElementById("utility").addEventListener("change", function () {
-      fetchSchedules(this.value);
+    // When utility changes, get schedules
+    utilityDropdown.addEventListener("change", () => {
+      const utility_id = utilityDropdown.value;
+      scheduleDropdown.innerHTML = '<option value="">-- Choose a schedule --</option>';
+      scheduleDropdown.disabled = true;
+      viewBtn.disabled = true;
+      output.innerHTML = "";
+
+      if (!utility_id) return;
+
+      fetch(`/schedules_by_utility?utility_id=${utility_id}`)
+        .then(res => res.json())
+        .then(data => {
+          data.forEach(sch => {
+            const opt = document.createElement('option');
+            opt.value = sch.ScheduleID;
+            opt.textContent = sch.ScheduleName + " (ID: " + sch.ScheduleID + ")";
+            scheduleDropdown.appendChild(opt);
+          });
+          scheduleDropdown.disabled = false;
+        });
     });
 
-    fetchStates();
+    // Enable button when schedule selected
+    scheduleDropdown.addEventListener("change", () => {
+      viewBtn.disabled = !scheduleDropdown.value;
+      output.innerHTML = "";
+    });
+
+    // View schedule details
+    viewBtn.addEventListener("click", () => {
+      const schedule_id = scheduleDropdown.value;
+      output.innerHTML = "Loading...";
+
+      fetch(`/view_schedule?schedule_id=${schedule_id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.error) {
+            output.innerHTML = `<p style="color:red;">${data.error}</p>`;
+            return;
+          }
+
+          let html = `<h2>Schedule ID: ${data.ScheduleID}</h2>`;
+          html += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+          output.innerHTML = html;
+        })
+        .catch(err => {
+          output.innerHTML = `<p style="color:red;">Error loading schedule.</p>`;
+        });
+    });
   </script>
-
 </body>
 </html>
