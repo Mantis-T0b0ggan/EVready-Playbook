@@ -57,7 +57,7 @@ def get_schedule_details():
             "EnergyTime_Table",
             "IncrementalDemand_Table",
             "IncrementalEnergy_Table",
-            "Other_Table",
+            "OtherCharges_Table",
             "Rate_Table",
             "RateTime_Table"
         ]
