@@ -1,168 +1,129 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Schedule Detail Viewer</title>
+  <title>EVReady Utility Bill Estimator</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      margin: 30px;
-      background-color: #f9f9f9;
+      margin: 40px;
     }
     h1 {
-      color: #333;
+      color: #1c2b4a;
     }
     label {
-      font-weight: bold;
+      display: block;
+      margin-top: 20px;
     }
-    select, button {
-      font-size: 14px;
+    select, input {
       padding: 6px;
-      margin-right: 10px;
-      margin-bottom: 20px;
+      margin-top: 5px;
+      width: 300px;
     }
-    .section {
-      background: #fff;
-      padding: 20px;
-      margin-bottom: 30px;
-      border-radius: 6px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: #1c2b4a;
+      color: white;
+      border: none;
+      cursor: pointer;
     }
-    .table-wrapper {
-      margin-top: 15px;
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      margin-bottom: 25px;
-    }
-    th, td {
-      padding: 8px 12px;
-      border: 1px solid #ccc;
-      text-align: left;
-    }
-    th {
-      background-color: #eaeaea;
+    #result {
+      margin-top: 30px;
+      padding: 15px;
+      background: #f2f2f2;
+      width: 500px;
     }
   </style>
 </head>
 <body>
+  <h1>EVReady Utility Bill Estimator</h1>
 
-  <h1>Utility Schedule + Detail Viewer</h1>
+  <label>Select a State:</label>
+  <select id="stateDropdown"></select>
 
-  <div class="section">
-    <label for="state">Select a State:</label>
-    <select id="state"></select>
+  <label>Select a Utility:</label>
+  <select id="utilityDropdown"></select>
 
-    <label for="utility">Select a Utility:</label>
-    <select id="utility"></select>
+  <label>Select a Schedule:</label>
+  <select id="scheduleDropdown"></select>
 
-    <label for="schedule">Select a Schedule:</label>
-    <select id="schedule"></select>
-  </div>
+  <label>Monthly kWh Usage:</label>
+  <input type="number" id="kwhUsage" placeholder="e.g. 1200">
 
-  <div class="section" id="results">
-    <h2>Schedule Info</h2>
-    <div id="scheduleData">Select a schedule to load details.</div>
-  </div>
+  <label>Monthly kW Demand:</label>
+  <input type="number" id="kwDemand" placeholder="e.g. 50">
+
+  <label>Billing Days:</label>
+  <input type="number" id="billingDays" placeholder="e.g. 30">
+
+  <button onclick="calculateBill()">Estimate Bill</button>
+
+  <div id="result"></div>
 
   <script>
-    const stateSelect = document.getElementById("state");
-    const utilitySelect = document.getElementById("utility");
-    const scheduleSelect = document.getElementById("schedule");
-    const scheduleDataDiv = document.getElementById("scheduleData");
-
-    // Load states
-    fetch("/states")
-      .then(res => res.json())
-      .then(states => {
-        stateSelect.innerHTML = '<option value="">-- Select --</option>';
-        states.forEach(state => {
-          stateSelect.innerHTML += `<option value="${state}">${state}</option>`;
-        });
+    async function fetchStates() {
+      const res = await fetch("/states");
+      const states = await res.json();
+      const dropdown = document.getElementById("stateDropdown");
+      dropdown.innerHTML = `<option value="">Select state</option>`;
+      states.forEach(state => {
+        dropdown.innerHTML += `<option value="${state}">${state}</option>`;
       });
+    }
 
-    // When state changes, load utilities
-    stateSelect.addEventListener("change", () => {
-      const state = stateSelect.value;
-      utilitySelect.innerHTML = '';
-      scheduleSelect.innerHTML = '';
-      scheduleDataDiv.innerHTML = '';
-      if (!state) return;
+    async function fetchUtilities() {
+      const state = document.getElementById("stateDropdown").value;
+      const res = await fetch(`/utilities?state=${state}`);
+      const utilities = await res.json();
+      const dropdown = document.getElementById("utilityDropdown");
+      dropdown.innerHTML = `<option value="">Select utility</option>`;
+      utilities.forEach(util => {
+        dropdown.innerHTML += `<option value="${util.UtilityID}">${util.UtilityName}</option>`;
+      });
+    }
 
-      fetch(`/utilities?state=${state}`)
-        .then(res => res.json())
-        .then(data => {
-          utilitySelect.innerHTML = '<option value="">-- Select --</option>';
-          data.forEach(utility => {
-            utilitySelect.innerHTML += `<option value="${utility.UtilityID}">${utility.UtilityName}</option>`;
-          });
-        });
-    });
+    async function fetchSchedules() {
+      const utilityID = document.getElementById("utilityDropdown").value;
+      const res = await fetch(`/schedules?utility_id=${utilityID}`);
+      const schedules = await res.json();
+      const dropdown = document.getElementById("scheduleDropdown");
+      dropdown.innerHTML = `<option value="">Select schedule</option>`;
+      schedules.forEach(sch => {
+        dropdown.innerHTML += `<option value="${sch.ScheduleID}">${sch.ScheduleName}</option>`;
+      });
+    }
 
-    // When utility changes, load schedules
-    utilitySelect.addEventListener("change", () => {
-      const utilityId = utilitySelect.value;
-      scheduleSelect.innerHTML = '';
-      scheduleDataDiv.innerHTML = '';
-      if (!utilityId) return;
+    async function calculateBill() {
+      const scheduleID = document.getElementById("scheduleDropdown").value;
+      const kwh = parseFloat(document.getElementById("kwhUsage").value);
+      const kw = parseFloat(document.getElementById("kwDemand").value);
+      const days = parseInt(document.getElementById("billingDays").value);
 
-      fetch(`/schedules?utility_id=${utilityId}`)
-        .then(res => res.json())
-        .then(data => {
-          scheduleSelect.innerHTML = '<option value="">-- Select --</option>';
-          data.forEach(sched => {
-            scheduleSelect.innerHTML += `<option value="${sched.ScheduleID}">${sched.ScheduleName}</option>`;
-          });
-        });
-    });
+      if (!scheduleID || isNaN(kwh) || isNaN(kw) || isNaN(days)) {
+        document.getElementById("result").innerText = "Please fill in all fields.";
+        return;
+      }
 
-    // When schedule changes, load all details
-    scheduleSelect.addEventListener("change", () => {
-      const scheduleId = scheduleSelect.value;
-      if (!scheduleId) return;
+      const res = await fetch(`/calculate_bill?schedule_id=${scheduleID}&kwh=${kwh}&kw=${kw}&days=${days}`);
+      const data = await res.json();
 
-      scheduleDataDiv.innerHTML = "Loading...";
+      if (data.error) {
+        document.getElementById("result").innerText = "Error: " + data.error;
+      } else {
+        document.getElementById("result").innerHTML = `
+          <strong>Estimated Monthly Bill:</strong> $${data.total.toFixed(2)}<br>
+          Breakdown:<br>
+          Energy: $${data.energy.toFixed(2)}<br>
+          Demand: $${data.demand.toFixed(2)}<br>
+          Fixed Charges: $${data.fixed.toFixed(2)}<br>
+        `;
+      }
+    }
 
-      fetch(`/schedule_details?schedule_id=${scheduleId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.error) {
-            scheduleDataDiv.innerHTML = `<p style="color:red;">${data.error}</p>`;
-            return;
-          }
+    document.getElementById("stateDropdown").addEventListener("change", fetchUtilities);
+    document.getElementById("utilityDropdown").addEventListener("change", fetchSchedules);
 
-          let html = "";
-
-          // Base schedule
-          html += `<h3>Base Schedule</h3><table><tbody>`;
-          Object.entries(data.schedule).forEach(([key, value]) => {
-            html += `<tr><th>${key}</th><td>${value ?? ''}</td></tr>`;
-          });
-          html += `</tbody></table>`;
-
-          // TIP tables
-          for (const [tableName, records] of Object.entries(data.details)) {
-            if (records.length > 0) {
-              html += `<h3>${tableName}</h3><div class="table-wrapper"><table><thead><tr>`;
-              Object.keys(records[0]).forEach(key => {
-                html += `<th>${key}</th>`;
-              });
-              html += `</tr></thead><tbody>`;
-              records.forEach(row => {
-                html += `<tr>`;
-                Object.values(row).forEach(val => {
-                  html += `<td>${val ?? ''}</td>`;
-                });
-                html += `</tr>`;
-              });
-              html += `</tbody></table></div>`;
-            }
-          }
-
-          scheduleDataDiv.innerHTML = html;
-        });
-    });
+    fetchStates();
   </script>
-
 </body>
 </html>
