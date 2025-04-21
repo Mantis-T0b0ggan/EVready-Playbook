@@ -1,154 +1,168 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>EVready Utility Schedule Viewer</title>
+  <title>Schedule Detail Viewer</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      margin: 40px;
-      background-color: #f5f5f5;
+      margin: 30px;
+      background-color: #f9f9f9;
     }
-    select, button {
-      font-size: 16px;
-      padding: 8px;
-      margin: 10px 0;
+    h1 {
+      color: #333;
     }
     label {
       font-weight: bold;
     }
-    #scheduleOutput {
-      margin-top: 20px;
-      padding: 15px;
-      background: white;
-      border: 1px solid #ccc;
-    }
-    .dropdown-group {
+    select, button {
+      font-size: 14px;
+      padding: 6px;
+      margin-right: 10px;
       margin-bottom: 20px;
+    }
+    .section {
+      background: #fff;
+      padding: 20px;
+      margin-bottom: 30px;
+      border-radius: 6px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .table-wrapper {
+      margin-top: 15px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-bottom: 25px;
+    }
+    th, td {
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      text-align: left;
+    }
+    th {
+      background-color: #eaeaea;
     }
   </style>
 </head>
 <body>
-  <h1>Utility Schedule Viewer</h1>
 
-  <div class="dropdown-group">
-    <label for="state">Select State:</label><br>
-    <select id="stateDropdown">
-      <option value="">-- Choose a state --</option>
-    </select>
+  <h1>Utility Schedule + Detail Viewer</h1>
+
+  <div class="section">
+    <label for="state">Select a State:</label>
+    <select id="state"></select>
+
+    <label for="utility">Select a Utility:</label>
+    <select id="utility"></select>
+
+    <label for="schedule">Select a Schedule:</label>
+    <select id="schedule"></select>
   </div>
 
-  <div class="dropdown-group">
-    <label for="utility">Select Utility:</label><br>
-    <select id="utilityDropdown" disabled>
-      <option value="">-- Choose a utility --</option>
-    </select>
+  <div class="section" id="results">
+    <h2>Schedule Info</h2>
+    <div id="scheduleData">Select a schedule to load details.</div>
   </div>
-
-  <div class="dropdown-group">
-    <label for="schedule">Select Schedule:</label><br>
-    <select id="scheduleDropdown" disabled>
-      <option value="">-- Choose a schedule --</option>
-    </select>
-  </div>
-
-  <button id="viewBtn" disabled>View Schedule Details</button>
-
-  <div id="scheduleOutput"></div>
 
   <script>
-    const stateDropdown = document.getElementById('stateDropdown');
-    const utilityDropdown = document.getElementById('utilityDropdown');
-    const scheduleDropdown = document.getElementById('scheduleDropdown');
-    const viewBtn = document.getElementById('viewBtn');
-    const output = document.getElementById('scheduleOutput');
+    const stateSelect = document.getElementById("state");
+    const utilitySelect = document.getElementById("utility");
+    const scheduleSelect = document.getElementById("schedule");
+    const scheduleDataDiv = document.getElementById("scheduleData");
 
     // Load states
     fetch("/states")
       .then(res => res.json())
       .then(states => {
+        stateSelect.innerHTML = '<option value="">-- Select --</option>';
         states.forEach(state => {
-          const option = document.createElement('option');
-          option.value = state;
-          option.textContent = state;
-          stateDropdown.appendChild(option);
+          stateSelect.innerHTML += `<option value="${state}">${state}</option>`;
         });
       });
 
-    // When state changes, get utilities
-    stateDropdown.addEventListener("change", () => {
-      const state = stateDropdown.value;
-      utilityDropdown.innerHTML = '<option value="">-- Choose a utility --</option>';
-      scheduleDropdown.innerHTML = '<option value="">-- Choose a schedule --</option>';
-      utilityDropdown.disabled = true;
-      scheduleDropdown.disabled = true;
-      viewBtn.disabled = true;
-      output.innerHTML = "";
-
+    // When state changes, load utilities
+    stateSelect.addEventListener("change", () => {
+      const state = stateSelect.value;
+      utilitySelect.innerHTML = '';
+      scheduleSelect.innerHTML = '';
+      scheduleDataDiv.innerHTML = '';
       if (!state) return;
 
-      fetch(`/utilities_by_state?state=${state}`)
+      fetch(`/utilities?state=${state}`)
         .then(res => res.json())
         .then(data => {
-          data.forEach(util => {
-            const opt = document.createElement('option');
-            opt.value = util.UtilityID;
-            opt.textContent = util.UtilityName;
-            utilityDropdown.appendChild(opt);
+          utilitySelect.innerHTML = '<option value="">-- Select --</option>';
+          data.forEach(utility => {
+            utilitySelect.innerHTML += `<option value="${utility.UtilityID}">${utility.UtilityName}</option>`;
           });
-          utilityDropdown.disabled = false;
         });
     });
 
-    // When utility changes, get schedules
-    utilityDropdown.addEventListener("change", () => {
-      const utility_id = utilityDropdown.value;
-      scheduleDropdown.innerHTML = '<option value="">-- Choose a schedule --</option>';
-      scheduleDropdown.disabled = true;
-      viewBtn.disabled = true;
-      output.innerHTML = "";
+    // When utility changes, load schedules
+    utilitySelect.addEventListener("change", () => {
+      const utilityId = utilitySelect.value;
+      scheduleSelect.innerHTML = '';
+      scheduleDataDiv.innerHTML = '';
+      if (!utilityId) return;
 
-      if (!utility_id) return;
-
-      fetch(`/schedules_by_utility?utility_id=${utility_id}`)
+      fetch(`/schedules?utility_id=${utilityId}`)
         .then(res => res.json())
         .then(data => {
-          data.forEach(sch => {
-            const opt = document.createElement('option');
-            opt.value = sch.ScheduleID;
-            opt.textContent = sch.ScheduleName + " (ID: " + sch.ScheduleID + ")";
-            scheduleDropdown.appendChild(opt);
+          scheduleSelect.innerHTML = '<option value="">-- Select --</option>';
+          data.forEach(sched => {
+            scheduleSelect.innerHTML += `<option value="${sched.ScheduleID}">${sched.ScheduleName}</option>`;
           });
-          scheduleDropdown.disabled = false;
         });
     });
 
-    // Enable button when schedule selected
-    scheduleDropdown.addEventListener("change", () => {
-      viewBtn.disabled = !scheduleDropdown.value;
-      output.innerHTML = "";
-    });
+    // When schedule changes, load all details
+    scheduleSelect.addEventListener("change", () => {
+      const scheduleId = scheduleSelect.value;
+      if (!scheduleId) return;
 
-    // View schedule details
-    viewBtn.addEventListener("click", () => {
-      const schedule_id = scheduleDropdown.value;
-      output.innerHTML = "Loading...";
+      scheduleDataDiv.innerHTML = "Loading...";
 
-      fetch(`/view_schedule?schedule_id=${schedule_id}`)
+      fetch(`/schedule_details?schedule_id=${scheduleId}`)
         .then(res => res.json())
         .then(data => {
           if (data.error) {
-            output.innerHTML = `<p style="color:red;">${data.error}</p>`;
+            scheduleDataDiv.innerHTML = `<p style="color:red;">${data.error}</p>`;
             return;
           }
 
-          let html = `<h2>Schedule ID: ${data.ScheduleID}</h2>`;
-          html += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
-          output.innerHTML = html;
-        })
-        .catch(err => {
-          output.innerHTML = `<p style="color:red;">Error loading schedule.</p>`;
+          let html = "";
+
+          // Base schedule
+          html += `<h3>Base Schedule</h3><table><tbody>`;
+          Object.entries(data.schedule).forEach(([key, value]) => {
+            html += `<tr><th>${key}</th><td>${value ?? ''}</td></tr>`;
+          });
+          html += `</tbody></table>`;
+
+          // TIP tables
+          for (const [tableName, records] of Object.entries(data.details)) {
+            if (records.length > 0) {
+              html += `<h3>${tableName}</h3><div class="table-wrapper"><table><thead><tr>`;
+              Object.keys(records[0]).forEach(key => {
+                html += `<th>${key}</th>`;
+              });
+              html += `</tr></thead><tbody>`;
+              records.forEach(row => {
+                html += `<tr>`;
+                Object.values(row).forEach(val => {
+                  html += `<td>${val ?? ''}</td>`;
+                });
+                html += `</tr>`;
+              });
+              html += `</tbody></table></div>`;
+            }
+          }
+
+          scheduleDataDiv.innerHTML = html;
         });
     });
   </script>
+
 </body>
 </html>
