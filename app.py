@@ -75,5 +75,32 @@ def get_schedule_details():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/load_schedule_detail", methods=["POST"])
+def load_schedule_detail():
+    data = request.get_json()
+    schedule_id = data.get("schedule_id")
+
+    if not schedule_id:
+        return jsonify({"error": "Schedule ID is required"}), 400
+
+    url = f"https://secure.rateacuity.com/RateAcuityJSONAPI/api/scheduledetailtip/{schedule_id}"
+    params = {
+        "p1": os.getenv("RATEACUITY_USERNAME"),
+        "p2": os.getenv("RATEACUITY_PASSWORD")
+    }
+    response = requests.get(url, params=params)
+
+    try:
+        details = response.json()
+        print(f"🔗 Full detail URL: {response.url}")
+        print("📦 Raw keys returned in response:", details.keys())  # DEBUG LINE
+        return jsonify({"message": f"Fetched detail response for ScheduleID {schedule_id}."})
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to parse detail response: {str(e)}",
+            "raw_response": response.text[:300]
+        }), 500
+
+
 if __name__ == "__main__":
     app.run(debug=True)
