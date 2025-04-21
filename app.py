@@ -53,6 +53,7 @@ def get_schedule_details():
             "DemandTime_Table",
             "Demand_Table",
             "EnergyTime_Table",
+            "Energy_Table",
             "IncrementalDemand_Table",
             "IncrementalEnergy_Table",
             "OtherCharges_Table",
@@ -91,14 +92,25 @@ def calculate_bill():
         breakdown = {}
 
         # --- ENERGY CHARGES ---
-        energy_data = supabase.table("EnergyTime_Table").select("*").eq("ScheduleID", schedule_id).execute().data
         energy_charge = 0.0
-        for row in energy_data:
+
+        energy_time_data = supabase.table("EnergyTime_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        energy_flat_data = supabase.table("Energy_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+
+        for row in energy_time_data:
             try:
                 rate = float(row.get("RatekWH", 0))
                 energy_charge += usage_kwh * rate
             except (TypeError, ValueError):
                 continue
+
+        for row in energy_flat_data:
+            try:
+                rate = float(row.get("RatekWH", 0))
+                energy_charge += usage_kwh * rate
+            except (TypeError, ValueError):
+                continue
+
         breakdown["Energy Charges"] = energy_charge
         total_cost += energy_charge
 
@@ -128,9 +140,23 @@ def calculate_bill():
 
         # --- OTHER CHARGES ---
         other_data = supabase.table("OtherCharges_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        print("Other Charges:", other_data)
-        other_charge = 0.0  # Skipping for now (no amount field confirmed)
+        other_charge = 0.0
+
+        for row in other_data:
+            try:
+                desc = row.get("Description", "").lower()
+                unit = row.get("ChargeUnit", "").lower()
+                charge = float(row.get("ChargeType", 0))  # No ChargeAmount, assume ChargeType is the $ amount
+
+                if "low-income" in desc and "per meter" in unit:
+                    other_charge += charge  # Assume 1 meter for now
+
+                # Add more mappings here as needed
+            except Exception:
+                continue
+
         breakdown["Other Charges"] = other_charge
+        total_cost += other_charge
 
         return jsonify({
             "total_cost": round(total_cost, 2),
