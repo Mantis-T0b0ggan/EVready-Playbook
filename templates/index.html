@@ -34,6 +34,11 @@
       margin-top: 20px;
       background-color: #f2f2f2;
       padding: 15px;
+      line-height: 1.5;
+    }
+    ul {
+      margin-top: 10px;
+      padding-left: 20px;
     }
   </style>
 </head>
@@ -119,39 +124,75 @@
     fetchUtilities(state);
     document.getElementById('utility').innerHTML = '';
     document.getElementById('schedule').innerHTML = '';
-    document.getElementById('input-fields').classList.add('hidden');
+    document.getElementById('resultBox').innerHTML = '';
   });
 
   document.getElementById('utility').addEventListener('change', e => {
     const utilityID = e.target.value;
     fetchSchedules(utilityID);
+    document.getElementById('resultBox').innerHTML = '';
   });
 
   document.getElementById('schedule').addEventListener('change', e => {
     const scheduleID = e.target.value;
     fetchScheduleDetails(scheduleID);
+    document.getElementById('resultBox').innerHTML = '';
   });
 
-  document.getElementById('submitBtn').addEventListener('click', () => {
+  document.getElementById('submitBtn').addEventListener('click', async () => {
     const state = document.getElementById('state').value;
     const utility = document.getElementById('utility').value;
     const schedule = document.getElementById('schedule').value;
-    const kwh = document.getElementById('kwh').value;
-    const kw = document.getElementById('kw').value;
-    const days = document.getElementById('days').value;
+    const kwh = document.getElementById('kwh').value || 0;
+    const kw = document.getElementById('kw').value || 0;
+    const days = document.getElementById('days').value || 30;
 
     const resultBox = document.getElementById('resultBox');
-    resultBox.innerHTML = `
-      <strong>State:</strong> ${state}<br>
-      <strong>Utility ID:</strong> ${utility}<br>
-      <strong>Schedule ID:</strong> ${schedule}<br>
-      <strong>Usage:</strong> ${kwh || "n/a"} kWh<br>
-      <strong>Demand:</strong> ${kw || "n/a"} kW<br>
-      <strong>Days:</strong> ${days || "n/a"} days<br>
-      <br><em>⚙️ Next: Hook up billing calculation using Supabase data.</em>
-    `;
+    resultBox.innerHTML = "⏳ Calculating...";
+
+    try {
+      const res = await fetch('/calculate_bill', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          schedule_id: schedule,
+          usage_kwh: kwh,
+          demand_kw: kw,
+          billing_days: days
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.error) {
+        resultBox.innerHTML = `<strong>Error:</strong> ${data.error}`;
+      } else {
+        let breakdownHtml = "";
+        for (const [label, value] of Object.entries(data.breakdown)) {
+          breakdownHtml += `<li>${label}: $${value.toFixed(2)}</li>`;
+        }
+
+        resultBox.innerHTML = `
+          <strong>State:</strong> ${state}<br>
+          <strong>Utility ID:</strong> ${utility}<br>
+          <strong>Schedule ID:</strong> ${schedule}<br>
+          <strong>Usage:</strong> ${kwh} kWh<br>
+          <strong>Demand:</strong> ${kw} kW<br>
+          <strong>Days:</strong> ${days} days<br><br>
+          <strong>Total Estimated Cost:</strong> $${data.total_cost.toFixed(2)}<br>
+          <ul>${breakdownHtml}</ul>
+        `;
+      }
+
+    } catch (err) {
+      console.error(err);
+      resultBox.innerHTML = `<strong>Request failed:</strong> ${err.message}`;
+    }
   });
 
+  // Init
   fetchStates();
 </script>
 
