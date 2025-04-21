@@ -128,6 +128,7 @@ def calculate_bill():
 
         # --- OTHER CHARGES ---
         other_data = supabase.table("OtherCharges_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        print("Other Charges:", other_data)
         other_charge = 0.0  # Skipping for now (no amount field confirmed)
         breakdown["Other Charges"] = other_charge
 
