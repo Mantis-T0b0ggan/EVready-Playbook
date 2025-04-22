@@ -5,7 +5,6 @@ from flask import Flask, render_template, request, jsonify
 
 # Load environment variables
 load_dotenv()
-
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -18,153 +17,157 @@ def home():
 
 @app.route("/states")
 def get_states():
-    try:
-        result = supabase.table("Utility").select("State").execute()
-        unique_states = sorted(set([row["State"] for row in result.data if "State" in row]))
-        return jsonify(unique_states)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    result = supabase.table("Utility").select("State").execute()
+    states = sorted(set(row["State"] for row in result.data))
+    return jsonify(states)
 
 @app.route("/utilities")
 def get_utilities():
     state = request.args.get("state")
-    try:
-        result = supabase.table("Utility").select("UtilityID, UtilityName").eq("State", state).execute()
-        return jsonify(result.data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    result = supabase.table("Utility").select("UtilityID, UtilityName").eq("State", state).execute()
+    return jsonify(result.data)
 
 @app.route("/schedules")
 def get_schedules():
     utility_id = request.args.get("utility_id")
-    try:
-        result = supabase.table("Schedule_Table").select("ScheduleID, ScheduleName").eq("UtilityID", utility_id).execute()
-        return jsonify(result.data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    result = supabase.table("Schedule_Table").select("ScheduleID, ScheduleName").eq("UtilityID", utility_id).execute()
+    return jsonify(result.data)
 
 @app.route("/schedule_details")
 def get_schedule_details():
     schedule_id = request.args.get("schedule_id")
-    try:
-        schedule = supabase.table("Schedule_Table").select("*").eq("ScheduleID", schedule_id).single().execute().data
-
-        detail_tables = [
-            "DemandTime_Table",
-            "Demand_Table",
-            "EnergyTime_Table",
-            "Energy_Table",
-            "IncrementalDemand_Table",
-            "IncrementalEnergy_Table",
-            "OtherCharges_Table",
-            "ReactiveDemand_Table",
-            "ServiceCharge_Table",
-            "TaxInfo_Table"
-        ]
-
-        details = {}
-        present_tables = []
-
-        for table in detail_tables:
-            res = supabase.table(table).select("*").eq("ScheduleID", schedule_id).execute()
-            if res.data:
-                details[table] = res.data
-                present_tables.append(table)
-
-        return jsonify({
-            "schedule": schedule,
-            "present_tables": present_tables,
-            "details": details
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    detail_tables = [
+        "Energy_Table", "EnergyTime_Table", "IncrementalEnergy_Table",
+        "Demand_Table", "DemandTime_Table", "IncrementalDemand_Table",
+        "ServiceCharge_Table", "OtherCharges_Table", "Percentages_Table",
+        "TaxInfo_Table"
+    ]
+    present_tables = []
+    for table in detail_tables:
+        result = supabase.table(table).select("*").eq("ScheduleID", schedule_id).execute()
+        if result.data:
+            present_tables.append(table)
+    return jsonify({"present_tables": present_tables})
 
 @app.route("/calculate_bill", methods=["POST"])
 def calculate_bill():
-    try:
-        data = request.get_json()
-        schedule_id = data.get("schedule_id")
-        usage_kwh = float(data.get("usage_kwh", 0))
-        demand_kw = float(data.get("demand_kw", 0))
-        billing_days = float(data.get("billing_days", 30))
+    data = request.get_json()
+    schedule_id = data.get("schedule_id")
+    usage_kwh = float(data.get("usage_kwh", 0))
+    demand_kw = float(data.get("demand_kw", 0))
+    billing_days = float(data.get("billing_days", 30))
 
-        total_cost = 0.0
-        breakdown = {}
+    total_cost = 0.0
+    breakdown = {}
 
-        # --- ENERGY CHARGES ---
-        energy_charge = 0.0
-
-        energy_time_data = supabase.table("EnergyTime_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        energy_flat_data = supabase.table("Energy_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-
-        for row in energy_time_data:
+    # --- ENERGY ---
+    energy_charge = 0.0
+    for tbl in ["Energy_Table", "EnergyTime_Table"]:
+        rows = supabase.table(tbl).select("*").eq("ScheduleID", schedule_id).execute().data
+        for row in rows:
             try:
-                rate = float(row.get("RatekWH", 0))
+                rate = float(row.get("RatekWh", 0))
                 energy_charge += usage_kwh * rate
-            except (TypeError, ValueError):
+            except:
                 continue
 
-        for row in energy_flat_data:
-            try:
-                rate = float(row.get("RatekWH", 0))
-                energy_charge += usage_kwh * rate
-            except (TypeError, ValueError):
-                continue
+    # Incremental energy tiers
+    tier_data = supabase.table("IncrementalEnergy_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+    remaining_kwh = usage_kwh
+    for row in sorted(tier_data, key=lambda x: float(x.get("StartkWh", 0))):
+        try:
+            start = float(row.get("StartkWh", 0))
+            end = float(row.get("EndkWh", float("inf")))
+            rate = float(row.get("RatekWh", 0))
+            tier_kwh = min(remaining_kwh, end - start)
+            energy_charge += tier_kwh * rate
+            remaining_kwh -= tier_kwh
+        except:
+            continue
+    breakdown["Energy Charges"] = energy_charge
+    total_cost += energy_charge
 
-        breakdown["Energy Charges"] = energy_charge
-        total_cost += energy_charge
+    # --- DEMAND ---
+    demand_charge = 0.0
+    flat_rows = supabase.table("Demand_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+    for row in flat_rows:
+        try:
+            rate = float(row.get("RatekW", 0))
+            demand_charge += demand_kw * rate
+        except:
+            continue
 
-        # --- DEMAND CHARGES ---
-        demand_data = supabase.table("Demand_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        demand_charge = 0.0
-        for row in demand_data:
-            try:
-                rate = float(row.get("RatekW", 0))
-                demand_charge += demand_kw * rate
-            except (TypeError, ValueError):
-                continue
-        breakdown["Demand Charges"] = demand_charge
-        total_cost += demand_charge
+    # Incremental demand tiers
+    inc_rows = supabase.table("IncrementalDemand_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+    remaining_kw = demand_kw
+    for row in sorted(inc_rows, key=lambda r: float(r.get("StepMin", 0))):
+        try:
+            min_kw = float(row.get("StepMin", 0))
+            max_kw = float(row.get("StepMax", float("inf")))
+            rate = float(row.get("RatekW", 0))
+            tier_kw = min(remaining_kw, max_kw - min_kw)
+            demand_charge += tier_kw * rate
+            remaining_kw -= tier_kw
+        except:
+            continue
+    breakdown["Demand Charges"] = demand_charge
+    total_cost += demand_charge
 
-        # --- SERVICE CHARGES ---
-        service_data = supabase.table("ServiceCharge_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        service_charge = 0.0
-        for row in service_data:
-            try:
-                rate = float(row.get("Rate", 0))
-                service_charge += rate * (billing_days / 30)
-            except (TypeError, ValueError):
-                continue
-        breakdown["Service Charges"] = service_charge
-        total_cost += service_charge
+    # --- SERVICE ---
+    service_charge = 0.0
+    service_rows = supabase.table("ServiceCharge_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+    for row in service_rows:
+        try:
+            rate = float(row.get("Rate", 0))
+            service_charge += rate * (billing_days / 30)
+        except:
+            continue
+    breakdown["Service Charges"] = service_charge
+    total_cost += service_charge
 
-        # --- OTHER CHARGES ---
-        other_data = supabase.table("OtherCharges_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        other_charge = 0.0
+    # --- OTHER FIXED CHARGES ---
+    other_charge = 0.0
+    other_rows = supabase.table("OtherCharges_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+    for row in other_rows:
+        try:
+            desc = row.get("Description", "").lower()
+            unit = row.get("ChargeUnit", "").lower()
+            charge = float(row.get("ChargeType", 0))
+            if "low-income" in desc and "per meter" in unit:
+                other_charge += charge  # Assume 1 meter
+        except:
+            continue
+    breakdown["Other Charges"] = other_charge
+    total_cost += other_charge
 
-        for row in other_data:
-            try:
-                desc = row.get("Description", "").lower()
-                unit = row.get("ChargeUnit", "").lower()
-                charge = float(row.get("ChargeType", 0))  # No ChargeAmount, assume ChargeType is the $ amount
+    # --- PERCENT-BASED SURCHARGES ---
+    percent_rows = supabase.table("Percentages_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+    for row in percent_rows:
+        try:
+            pct = float(row.get("Per_cent", 0))
+            label = row.get("Description", "Percentage Surcharge")
+            surcharge = usage_kwh * pct
+            breakdown[label] = surcharge
+            total_cost += surcharge
+        except:
+            continue
 
-                if "low-income" in desc and "per meter" in unit:
-                    other_charge += charge  # Assume 1 meter for now
+    # --- TAX ---
+    tax_rows = supabase.table("TaxInfo_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+    for row in tax_rows:
+        try:
+            pct = float(row.get("Per_cent", 0))
+            if pct > 0:
+                tax = total_cost * (pct / 100)
+                breakdown["Tax"] = tax
+                total_cost += tax
+        except:
+            continue
 
-                # Add more mappings here as needed
-            except Exception:
-                continue
-
-        breakdown["Other Charges"] = other_charge
-        total_cost += other_charge
-
-        return jsonify({
-            "total_cost": round(total_cost, 2),
-            "breakdown": {k: round(v, 2) for k, v in breakdown.items()}
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify({
+        "total_cost": round(total_cost, 2),
+        "breakdown": {k: round(v, 2) for k, v in breakdown.items()}
+    })
 
 if __name__ == "__main__":
     app.run(debug=True)
