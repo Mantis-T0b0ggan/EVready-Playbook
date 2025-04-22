@@ -60,60 +60,25 @@ def calculate_bill():
     total_cost = 0.0
     breakdown = {}
 
-    # --- ENERGY ---
+    # --- ENERGY CHARGES (ONLY Energy_Table) ---
     energy_charge = 0.0
-    for tbl in ["Energy_Table", "EnergyTime_Table"]:
-        rows = supabase.table(tbl).select("*").eq("ScheduleID", schedule_id).execute().data
-        for row in rows:
-            try:
-                rate = float(row.get("RatekWh", 0))
-                energy_charge += usage_kwh * rate
-            except:
-                continue
-
-    # Incremental energy tiers
-    tier_data = supabase.table("IncrementalEnergy_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-    remaining_kwh = usage_kwh
-    for row in sorted(tier_data, key=lambda x: float(x.get("StartkWh", 0))):
+    energy_rows = supabase.table("Energy_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+    for row in energy_rows:
         try:
-            start = float(row.get("StartkWh", 0))
-            end = float(row.get("EndkWh", float("inf")))
             rate = float(row.get("RatekWh", 0))
-            tier_kwh = min(remaining_kwh, end - start)
-            energy_charge += tier_kwh * rate
-            remaining_kwh -= tier_kwh
+            energy_charge += usage_kwh * rate
         except:
             continue
     breakdown["Energy Charges"] = energy_charge
     total_cost += energy_charge
 
-    # --- DEMAND ---
-    demand_charge = 0.0
-    flat_rows = supabase.table("Demand_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-    for row in flat_rows:
-        try:
-            rate = float(row.get("RatekW", 0))
-            demand_charge += demand_kw * rate
-        except:
-            continue
-
-    # Incremental demand tiers
-    inc_rows = supabase.table("IncrementalDemand_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-    remaining_kw = demand_kw
-    for row in sorted(inc_rows, key=lambda r: float(r.get("StepMin", 0))):
-        try:
-            min_kw = float(row.get("StepMin", 0))
-            max_kw = float(row.get("StepMax", float("inf")))
-            rate = float(row.get("RatekW", 0))
-            tier_kw = min(remaining_kw, max_kw - min_kw)
-            demand_charge += tier_kw * rate
-            remaining_kw -= tier_kw
-        except:
-            continue
-    breakdown["Demand Charges"] = demand_charge
+    # --- DEMAND CHARGES (PSC @ $16.55) ---
+    psc_rate = 16.55  # Hardcoded for now
+    demand_charge = demand_kw * psc_rate
+    breakdown["Demand Charges (PSC @ $16.55)"] = demand_charge
     total_cost += demand_charge
 
-    # --- SERVICE ---
+    # --- SERVICE CHARGES ---
     service_charge = 0.0
     service_rows = supabase.table("ServiceCharge_Table").select("*").eq("ScheduleID", schedule_id).execute().data
     for row in service_rows:
@@ -168,6 +133,7 @@ def calculate_bill():
         "total_cost": round(total_cost, 2),
         "breakdown": {k: round(v, 2) for k, v in breakdown.items()}
     })
+
 
 if __name__ == "__main__":
     app.run(debug=True)
