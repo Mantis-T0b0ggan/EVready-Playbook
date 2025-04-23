@@ -39,8 +39,7 @@ def get_schedule_details():
     detail_tables = [
         "Energy_Table", "EnergyTime_Table", "IncrementalEnergy_Table",
         "Demand_Table", "DemandTime_Table", "IncrementalDemand_Table",
-        "ServiceCharge_Table", "OtherCharges_Table", "Percentages_Table",
-        "TaxInfo_Table"
+        "ServiceCharge_Table", "OtherCharges_Table", "TaxInfo_Table"
     ]
     present_tables = []
     for table in detail_tables:
@@ -60,19 +59,34 @@ def calculate_bill():
     total_cost = 0.0
     breakdown = {}
 
-    # --- ENERGY (Hardcoded flat rate) ---
+    # --- BASE ENERGY CHARGE (hardcoded flat rate) ---
     energy_rate = 0.029959
     energy_charge = usage_kwh * energy_rate
     breakdown["Energy Charges (@ $0.029959)"] = energy_charge
     total_cost += energy_charge
 
-    # --- DEMAND PSC ($16.55/kW) ---
+    # --- ADDITIONAL ENERGY SURCHARGES FROM ENERGY_TABLE ---
+    energy_rows = supabase.table("Energy_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+    for row in energy_rows:
+        try:
+            desc = row.get("Description", "").strip()
+            rate = float(row.get("RatekWh", 0))
+            if round(rate, 6) == round(energy_rate, 6):  # skip base rate
+                continue
+            if desc and rate > 0:
+                charge = usage_kwh * rate
+                breakdown[desc] = charge
+                total_cost += charge
+        except:
+            continue
+
+    # --- DEMAND PSC CHARGE ---
     psc_rate = 16.55
     psc_charge = demand_kw * psc_rate
     breakdown["Demand Charges (PSC @ $16.55)"] = psc_charge
     total_cost += psc_charge
 
-    # --- DELIVERY CAPACITY ($1.00/kW) ---
+    # --- DELIVERY CAPACITY CHARGE ---
     delivery_rate = 1.00
     delivery_charge = demand_kw * delivery_rate
     breakdown["Delivery Capacity Charge (@ $1.00)"] = delivery_charge
@@ -90,7 +104,7 @@ def calculate_bill():
     breakdown["Service Charges"] = service_charge
     total_cost += service_charge
 
-    # --- OTHER CHARGES (Fixed) ---
+    # --- OTHER CHARGES (Low-Income Fund) ---
     other_charge = 0.0
     other_rows = supabase.table("OtherCharges_Table").select("*").eq("ScheduleID", schedule_id).execute().data
     for row in other_rows:
@@ -99,24 +113,11 @@ def calculate_bill():
             unit = row.get("ChargeUnit", "").lower()
             charge = float(row.get("ChargeType", 0))
             if "low-income" in desc and "per meter" in unit:
-                other_charge += charge
+                other_charge += charge  # assume 1 meter
         except:
             continue
     breakdown["Other Charges"] = other_charge
     total_cost += other_charge
-
-        # --- PERCENTAGE-BASED CHARGES (Expanded) ---
-    percent_rows = supabase.table("Percentages_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-    for row in percent_rows:
-        try:
-            label = row.get("Description", "").strip() or "Energy Surcharge"
-            pct = float(row.get("Per_cent", 0))
-            if pct > 0:
-                surcharge = usage_kwh * pct
-                breakdown[label] = surcharge
-                total_cost += surcharge
-        except:
-            continue
 
     return jsonify({
         "total_cost": round(total_cost, 2),
