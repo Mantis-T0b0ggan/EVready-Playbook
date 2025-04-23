@@ -105,15 +105,16 @@ def calculate_bill():
     breakdown["Other Charges"] = other_charge
     total_cost += other_charge
 
-    # --- PERCENTAGE-BASED CHARGES ---
+        # --- PERCENTAGE-BASED CHARGES (Expanded) ---
     percent_rows = supabase.table("Percentages_Table").select("*").eq("ScheduleID", schedule_id).execute().data
     for row in percent_rows:
         try:
+            label = row.get("Description", "").strip() or "Energy Surcharge"
             pct = float(row.get("Per_cent", 0))
-            label = row.get("Description", "Percentage Surcharge")
-            surcharge = usage_kwh * pct
-            breakdown[label] = surcharge
-            total_cost += surcharge
+            if pct > 0:
+                surcharge = usage_kwh * pct
+                breakdown[label] = surcharge
+                total_cost += surcharge
         except:
             continue
 
