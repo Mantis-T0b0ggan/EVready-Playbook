@@ -60,23 +60,23 @@ def calculate_bill():
     total_cost = 0.0
     breakdown = {}
 
-    # --- ENERGY CHARGES (ONLY Energy_Table) ---
-    energy_charge = 0.0
-    energy_rows = supabase.table("Energy_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-    for row in energy_rows:
-        try:
-            rate = float(row.get("RatekWh", 0))
-            energy_charge += usage_kwh * rate
-        except:
-            continue
-    breakdown["Energy Charges"] = energy_charge
+    # --- ENERGY (Hardcoded flat rate) ---
+    energy_rate = 0.029959
+    energy_charge = usage_kwh * energy_rate
+    breakdown["Energy Charges (@ $0.029959)"] = energy_charge
     total_cost += energy_charge
 
-    # --- DEMAND CHARGES (PSC @ $16.55) ---
-    psc_rate = 16.55  # Hardcoded for now
-    demand_charge = demand_kw * psc_rate
-    breakdown["Demand Charges (PSC @ $16.55)"] = demand_charge
-    total_cost += demand_charge
+    # --- DEMAND PSC ($16.55/kW) ---
+    psc_rate = 16.55
+    psc_charge = demand_kw * psc_rate
+    breakdown["Demand Charges (PSC @ $16.55)"] = psc_charge
+    total_cost += psc_charge
+
+    # --- DELIVERY CAPACITY ($1.00/kW) ---
+    delivery_rate = 1.00
+    delivery_charge = demand_kw * delivery_rate
+    breakdown["Delivery Capacity Charge (@ $1.00)"] = delivery_charge
+    total_cost += delivery_charge
 
     # --- SERVICE CHARGES ---
     service_charge = 0.0
@@ -90,7 +90,7 @@ def calculate_bill():
     breakdown["Service Charges"] = service_charge
     total_cost += service_charge
 
-    # --- OTHER FIXED CHARGES ---
+    # --- OTHER CHARGES (Fixed) ---
     other_charge = 0.0
     other_rows = supabase.table("OtherCharges_Table").select("*").eq("ScheduleID", schedule_id).execute().data
     for row in other_rows:
@@ -99,13 +99,13 @@ def calculate_bill():
             unit = row.get("ChargeUnit", "").lower()
             charge = float(row.get("ChargeType", 0))
             if "low-income" in desc and "per meter" in unit:
-                other_charge += charge  # Assume 1 meter
+                other_charge += charge
         except:
             continue
     breakdown["Other Charges"] = other_charge
     total_cost += other_charge
 
-    # --- PERCENT-BASED SURCHARGES ---
+    # --- PERCENTAGE-BASED CHARGES ---
     percent_rows = supabase.table("Percentages_Table").select("*").eq("ScheduleID", schedule_id).execute().data
     for row in percent_rows:
         try:
@@ -117,23 +117,10 @@ def calculate_bill():
         except:
             continue
 
-    # --- TAX ---
-    tax_rows = supabase.table("TaxInfo_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-    for row in tax_rows:
-        try:
-            pct = float(row.get("Per_cent", 0))
-            if pct > 0:
-                tax = total_cost * (pct / 100)
-                breakdown["Tax"] = tax
-                total_cost += tax
-        except:
-            continue
-
     return jsonify({
         "total_cost": round(total_cost, 2),
         "breakdown": {k: round(v, 2) for k, v in breakdown.items()}
     })
-
 
 if __name__ == "__main__":
     app.run(debug=True)
