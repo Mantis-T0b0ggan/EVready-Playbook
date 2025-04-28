@@ -1,272 +1,164 @@
 import os
+from flask import Flask, render_template, request, jsonify
 from supabase import create_client, Client
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, jsonify
 
 # Load environment variables
 load_dotenv()
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = Flask(__name__, template_folder="templates")
 
-# ---- MAIN PAGES ----
-
+# Home Page (Bill Estimator)
 @app.route("/")
 def home():
     return render_template("index.html")
 
+# Browse Schedules Page
 @app.route("/browse_schedules")
 def browse_schedules():
     return render_template("browse_schedules.html")
 
-# ---- BILL ESTIMATOR API ENDPOINTS ----
-
+# GET all States that have Utilities with at least one Schedule
 @app.route("/states")
-def get_states_bill_estimator():
-    """Fetch states (for Bill Estimator page)."""
-    result = supabase.table("Utility").select("State").execute()
-    states = sorted(set(row["State"] for row in result.data))
-    return jsonify(states)
+def get_states():
+    try:
+        utilities = supabase.table("Utility").select("UtilityID, State").execute().data
+        schedules = supabase.table("Schedule_Table").select("UtilityID").execute().data
+        
+        utility_ids_with_schedules = {s['UtilityID'] for s in schedules if s.get('UtilityID') is not None}
+        
+        states_with_schedules = set()
+        for util in utilities:
+            if util['UtilityID'] in utility_ids_with_schedules:
+                states_with_schedules.add(util['State'])
+        
+        return jsonify(sorted(states_with_schedules))
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-@app.route("/utilities")
-def get_utilities_bill_estimator():
-    """Fetch utilities for selected state (Bill Estimator page)."""
+# GET Utilities filtered by selected State (must have schedules)
+@app.route("/get_utilities_by_state")
+def get_utilities_by_state():
     state = request.args.get("state")
-    result = supabase.table("Utility").select("UtilityID, UtilityName").eq("State", state).execute()
-    return jsonify(result.data)
+    try:
+        utilities = supabase.table("Utility").select("UtilityID, UtilityName, State").eq("State", state).execute().data
+        schedules = supabase.table("Schedule_Table").select("UtilityID").execute().data
 
+        utility_ids_with_schedules = {s['UtilityID'] for s in schedules if s.get('UtilityID') is not None}
+
+        filtered_utilities = [
+            {"UtilityID": u["UtilityID"], "UtilityName": u["UtilityName"]}
+            for u in utilities if u["UtilityID"] in utility_ids_with_schedules
+        ]
+
+        return jsonify(filtered_utilities)
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# GET Schedules for a selected Utility
 @app.route("/schedules")
-def get_schedules_bill_estimator():
-    """Fetch schedules for selected utility (Bill Estimator page)."""
+def get_schedules():
     utility_id = request.args.get("utility_id")
-    result = supabase.table("Schedule_Table").select("ScheduleID, ScheduleName").eq("UtilityID", utility_id).execute()
-    return jsonify(result.data)
+    try:
+        result = supabase.table("Schedule_Table").select("ScheduleID, ScheduleName").eq("UtilityID", utility_id).execute()
+        return jsonify(result.data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
+# GET Schedule Details for a selected Schedule
 @app.route("/schedule_details")
 def get_schedule_details():
-    """Fetch full schedule details and TIP tables for selected schedule."""
     schedule_id = request.args.get("schedule_id")
-    detail_tables = [
-        "EnergyTime_Table", "Energy_Table", "IncrementalEnergy_Table",
-        "DemandTime_Table", "Demand_Table", "IncrementalDemand_Table",
-        "OtherCharges_Table", "ServiceCharge_Table", "TaxInfo_Table"
-    ]
-    details = {}
-    present_tables = []
+    try:
+        # Base schedule info
+        schedule = supabase.table("Schedule_Table").select("*").eq("ScheduleID", schedule_id).single().execute().data
 
-    for table in detail_tables:
-        res = supabase.table(table).select("*").eq("ScheduleID", schedule_id).execute()
-        if res.data:
-            details[table] = res.data
-            present_tables.append(table)
+        # TIP detail tables
+        detail_tables = [
+            "DemandTime_Table",
+            "Demand_Table",
+            "EnergyTime_Table",
+            "Energy_Table",
+            "IncrementalDemand_Table",
+            "IncrementalEnergy_Table",
+            "ReactiveDemand_Table",
+            "ServiceCharge_Table",
+            "OtherCharges_Table",
+            "TaxInfo_Table",
+            "Percentages_Table",
+            "Notes_Table"
+        ]
 
-    return jsonify({
-        "present_tables": present_tables,
-        "details": details
-    })
+        details = {}
+        present_tables = []
 
+        for table in detail_tables:
+            res = supabase.table(table).select("*").eq("ScheduleID", schedule_id).execute()
+            if res.data:
+                details[table] = res.data
+                present_tables.append(table)
+
+        return jsonify({
+            "schedule": schedule,
+            "present_tables": present_tables,
+            "details": details
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# POST Calculate Bill based on selected Schedule
 @app.route("/calculate_bill", methods=["POST"])
 def calculate_bill():
-    """Main bill calculation logic."""
-    data = request.get_json()
-    schedule_id = data.get("schedule_id")
-    usage_kwh = float(data.get("usage_kwh", 0))
-    demand_kw = float(data.get("demand_kw", 0))
-    billing_days = float(data.get("billing_days", 30))
+    try:
+        data = request.json
+        schedule_id = int(data.get("schedule_id"))
+        usage_kwh = float(data.get("kwh", 0))
+        demand_kw = float(data.get("kw", 0))
+        billing_days = int(data.get("days", 0))
 
-    total_cost = 0.0
-    breakdown = {}
-
-    # --- BASE ENERGY CHARGE (hardcoded rate) ---
-    energy_rate = 0.029959
-    energy_charge = usage_kwh * energy_rate
-    breakdown["Energy Charges (@ $0.029959)"] = energy_charge
-    total_cost += energy_charge
-
-    # --- ADDITIONAL ENERGY SURCHARGES (Energy_Table) ---
-    energy_rows = supabase.table("Energy_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-    for row in energy_rows:
-        try:
-            desc = row.get("Description", "").strip()
-            rate = float(row.get("RatekWh", 0))
-            if round(rate, 6) == round(energy_rate, 6):
-                continue
-            if desc and rate > 0:
-                charge = usage_kwh * rate
-                breakdown[desc] = charge
-                total_cost += charge
-        except:
-            continue
-
-    # --- DEMAND CHARGES ---
-    psc_rate = 16.55
-    psc_charge = demand_kw * psc_rate
-    breakdown["Demand Charges (PSC @ $16.55)"] = psc_charge
-    total_cost += psc_charge
-
-    # --- DELIVERY CAPACITY CHARGE ---
-    delivery_rate = 1.00
-    delivery_charge = demand_kw * delivery_rate
-    breakdown["Delivery Capacity Charge (@ $1.00)"] = delivery_charge
-    total_cost += delivery_charge
-
-    # --- SERVICE CHARGES ---
-    service_charge = 0.0
-    service_rows = supabase.table("ServiceCharge_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-    for row in service_rows:
-        try:
-            rate = float(row.get("Rate", 0))
-            service_charge += rate * (billing_days / 30)
-        except:
-            continue
-    breakdown["Service Charges"] = service_charge
-    total_cost += service_charge
-
-    # --- OTHER FIXED CHARGES (Low Income Fund) ---
-    other_charge = 0.0
-    other_rows = supabase.table("OtherCharges_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-    for row in other_rows:
-        try:
-            desc = row.get("Description", "").lower()
-            unit = row.get("ChargeUnit", "").lower()
-            charge = float(row.get("ChargeType", 0))
-            if "low-income" in desc and "per meter" in unit:
-                other_charge += charge
-        except:
-            continue
-    breakdown["Other Charges"] = other_charge
-    total_cost += other_charge
-
-    return jsonify({
-        "total_cost": round(total_cost, 2),
-        "breakdown": {k: round(v, 2) for k, v in breakdown.items()}
-    })
-
-# ---- SCHEDULE BROWSER API ENDPOINTS ----
-
-@app.route("/get_states")
-def get_states_browser():
-    """Fetch states (for Schedule Browser page)."""
-    result = supabase.table("Utility").select("State").execute()
-    states = sorted(set(row["State"] for row in result.data))
-    return jsonify(states)
-
-@app.route("/get_utilities_by_state")
-def get_utilities_browser():
-    """Fetch utilities for selected state (Schedule Browser page)."""
-    state = request.args.get("state")
-    result = supabase.table("Utility").select("UtilityID, UtilityName").eq("State", state).execute()
-    return jsonify(result.data)
-
-@app.route("/get_schedules_by_utility")
-def get_schedules_browser():
-    """Fetch schedules with ALL TIP table details if present."""
-    utility_id = request.args.get("utility_id")
-
-    # Get schedules tied to utility
-    schedules = supabase.table("Schedule_Table").select("ScheduleID, ScheduleName").eq("UtilityID", utility_id).execute().data
-    if not schedules:
-        return jsonify([])
-
-    full_schedule_info = []
-
-    for sched in schedules:
-        schedule_id = sched.get("ScheduleID")
-        schedule_name = sched.get("ScheduleName")
-        
-        # Ensure ScheduleID is an integer (remove decimals)
-        try:
-            schedule_id = int(float(schedule_id))
-        except:
-            pass
-
-        schedule_info = {
-            "ScheduleID": schedule_id,
-            "ScheduleName": schedule_name
+        charges = {
+            "delivery_charge": 0.0,
+            "demand_charge": 0.0,
+            "energy_charge": 0.0,
+            "other_charges": 0.0,
+            "service_charge": 0.0,
         }
 
-        # --- Energy Time-Based Rates (EnergyTime_Table) ---
-        energy_time = supabase.table("EnergyTime_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        for idx, row in enumerate(energy_time):
-            rate = row.get("RatekWh")
-            if rate:
-                schedule_info[f"EnergyTime Rate {idx+1} ($/kWh)"] = rate
+        # Fetch Service Charges
+        service_data = supabase.table("ServiceCharge_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        if service_data:
+            charges["service_charge"] = sum(item.get("Rate", 0) for item in service_data)
 
-        # --- Flat Energy Rates and Surcharges (Energy_Table) ---
-        energy_flat = supabase.table("Energy_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        for row in energy_flat:
-            desc = row.get("Description", "").strip()
-            rate = row.get("RatekWh")
-            if desc and rate:
-                schedule_info[f"Energy Flat - {desc} ($/kWh)"] = rate
+        # Fetch Demand Charges
+        demand_data = supabase.table("Demand_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        if demand_data:
+            charges["demand_charge"] = sum(item.get("RatekW", 0) * demand_kw for item in demand_data)
 
-        # --- Demand Time-Based Rates (DemandTime_Table) ---
-        demand_time = supabase.table("DemandTime_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        for idx, row in enumerate(demand_time):
-            rate = row.get("RatekW")
-            if rate:
-                schedule_info[f"DemandTime Rate {idx+1} ($/kW)"] = rate
+        # Fetch Energy Flat Rates
+        energy_data = supabase.table("Energy_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        if energy_data:
+            charges["energy_charge"] = sum(item.get("RatekWh", 0) * usage_kwh for item in energy_data)
 
-        # --- Flat Demand Rates (Demand_Table) ---
-        demand_flat = supabase.table("Demand_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        for row in demand_flat:
-            rate = row.get("RatekW")
-            if rate:
-                schedule_info["Demand Flat Rate ($/kW)"] = rate
+        # Fetch Other Charges
+        other_data = supabase.table("OtherCharges_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        if other_data:
+            charges["other_charges"] = sum(item.get("ChargeType", 0) for item in other_data)
 
-        # --- Incremental Energy Rates (IncrementalEnergy_Table) ---
-        inc_energy = supabase.table("IncrementalEnergy_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        for idx, row in enumerate(inc_energy):
-            rate = row.get("RatekWh")
-            if rate:
-                schedule_info[f"Incremental Energy Rate {idx+1} ($/kWh)"] = rate
+        total_cost = sum(charges.values())
 
-        # --- Incremental Demand Rates (IncrementalDemand_Table) ---
-        inc_demand = supabase.table("IncrementalDemand_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        for idx, row in enumerate(inc_demand):
-            rate = row.get("RatekW")
-            if rate:
-                schedule_info[f"Incremental Demand Rate {idx+1} ($/kW)"] = rate
+        return jsonify({
+            **charges,
+            "total_cost": total_cost
+        })
 
-        # --- Service Charges (ServiceCharge_Table) ---
-        service = supabase.table("ServiceCharge_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        for row in service:
-            rate = row.get("Rate")
-            if rate:
-                schedule_info["Service Charge ($/month)"] = rate
-
-        # --- Other Fixed Charges (OtherCharges_Table) ---
-        other = supabase.table("OtherCharges_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        for row in other:
-            desc = row.get("Description", "").strip()
-            charge = row.get("ChargeType")
-            if desc and charge:
-                schedule_info[f"Other Charge - {desc} ($)" ] = charge
-
-        # --- Percent-Based Charges (Percentages_Table) ---
-        percentages = supabase.table("Percentages_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        for row in percentages:
-            desc = row.get("Description", "").strip()
-            percent = row.get("Per_cent")
-            if desc and percent:
-                schedule_info[f"Percentage Charge - {desc} ($/kWh)"] = percent
-
-        # --- Tax Rates (TaxInfo_Table) ---
-        tax = supabase.table("TaxInfo_Table").select("*").eq("ScheduleID", schedule_id).execute().data
-        for row in tax:
-            percent = row.get("Per_cent")
-            if percent:
-                schedule_info["Tax Rate (%)"] = percent
-
-        # Add the fully built schedule
-        full_schedule_info.append(schedule_info)
-
-    return jsonify(full_schedule_info)
-
-
-# ---- RUN APP ----
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
