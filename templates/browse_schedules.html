@@ -64,11 +64,11 @@
             position: sticky;
             top: 50px;
             z-index: 500;
-            max-width: 200px; /* 🆕 Limit maximum width of each column */
-            white-space: normal; /* 🆕 Allow text to wrap onto multiple lines */
-            word-wrap: break-word; /* 🆕 Break long words if needed */
-            overflow-wrap: break-word; /* 🆕 Alternative for better browser support */
-            }
+            max-width: 200px; /* limit header width */
+            white-space: normal; /* allow text wrap */
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
         tr:nth-child(even) {
             background-color: #fafafa;
         }
@@ -143,7 +143,7 @@
 
             const keysArray = Array.from(allKeys);
 
-            // 🧹 Filter keys: Only keep keys with at least one real value
+            // 🧹 Filter keys: Only keep keys with at least one non-null value
             const filteredKeys = keysArray.filter(key => 
                 schedules.some(schedule => schedule[key] !== null && schedule[key] !== '' && schedule[key] !== undefined)
             );
@@ -164,7 +164,11 @@
                     if (value === undefined || value === null) {
                         value = '';
                     } else if (typeof value === 'number') {
-                        value = value.toFixed(4); // Format numbers cleanly
+                        if (key.toLowerCase().includes('id')) {
+                            value = Math.round(value); // Make IDs integers
+                        } else {
+                            value = value.toFixed(4); // Keep Energy/Demand rates at 4 decimals
+                        }
                     }
                     row += `<td>${value}</td>`;
                 });
