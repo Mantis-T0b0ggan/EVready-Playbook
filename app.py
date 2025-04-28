@@ -162,28 +162,61 @@ def get_utilities_browser():
 
 @app.route("/get_schedules_by_utility")
 def get_schedules_browser():
-    """Fetch schedules that have data in TIP tables."""
+    """Fetch schedules with TIP table details if present."""
     utility_id = request.args.get("utility_id")
+
+    # Get schedules tied to utility
     schedules = supabase.table("Schedule_Table").select("ScheduleID, ScheduleName").eq("UtilityID", utility_id).execute().data
     if not schedules:
         return jsonify([])
 
-    active_schedules = []
+    full_schedule_info = []
+
     for sched in schedules:
         schedule_id = sched.get("ScheduleID")
         schedule_name = sched.get("ScheduleName")
+        schedule_info = {
+            "ScheduleID": schedule_id,
+            "ScheduleName": schedule_name
+        }
 
-        has_energytime = supabase.table("EnergyTime_Table").select("ScheduleID").eq("ScheduleID", schedule_id).execute().data
-        has_demandtime = supabase.table("DemandTime_Table").select("ScheduleID").eq("ScheduleID", schedule_id).execute().data
-        has_service = supabase.table("ServiceCharge_Table").select("ScheduleID").eq("ScheduleID", schedule_id).execute().data
+        # Pull Energy Rate (EnergyTime_Table)
+        energy_rows = supabase.table("EnergyTime_Table").select("RatekWh").eq("ScheduleID", schedule_id).execute().data
+        if energy_rows:
+            try:
+                ratekwh = float(energy_rows[0].get("RatekWh", 0))
+                if ratekwh > 0:
+                    schedule_info["Energy Rate ($/kWh)"] = ratekwh
+            except:
+                pass
 
-        if has_energytime or has_demandtime or has_service:
-            active_schedules.append({
-                "ScheduleID": schedule_id,
-                "ScheduleName": schedule_name
+        # Pull Demand Rate (DemandTime_Table)
+        demand_rows = supabase.table("DemandTime_Table").select("RatekW").eq("ScheduleID", schedule_id).execute().data
+        if demand_rows:
+            try:
+                ratekw = float(demand_rows[0].get("RatekW", 0))
+                if ratekw > 0:
+                    schedule_info["Demand Rate ($/kW)"] = ratekw
+            except:
+                pass
+
+        # Pull Service Charge (ServiceCharge_Table)
+        service_rows = supabase.table("ServiceCharge_Table").select("Rate").eq("ScheduleID", schedule_id).execute().data
+        if service_rows:
+            try:
+                rate = float(service_rows[0].get("Rate", 0))
+                if rate > 0:
+                    schedule_info["Service Charge ($/month)"] = rate
+            except:
+                pass
+
+        # Only add schedules that have at least one detail (besides ScheduleID/Name)
+        if len(schedule_info.keys()) > 2:
+            full_schedule_info.append(schedule_info)
+
+    return jsonify(full_schedule_info)
+
             })
-
-    return jsonify(active_schedules)
 
 # ---- RUN APP ----
 
