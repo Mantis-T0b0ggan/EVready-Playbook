@@ -131,14 +131,24 @@
   }
 
   async function fetchSchedules(utilityID) {
-    const res = await fetch(`/schedules?utility_id=${utilityID}`);
-    const data = await res.json();
-    const select = document.getElementById('schedule');
-    select.innerHTML = '<option value="">-- Select a Schedule --</option>';
-    data.forEach(sch => {
-      select.innerHTML += `<option value="${sch.ScheduleID}">${sch.ScheduleName}</option>`;
-    });
-  }
+  const res = await fetch(`/schedules?utility_id=${utilityID}`);
+  const data = await res.json();
+  const select = document.getElementById('schedule');
+  select.innerHTML = '<option value="">-- Select a Schedule --</option>';
+  
+  data.forEach(sch => {
+    let label = "";
+    if (sch.ScheduleName && sch.ScheduleName.trim() !== "") {
+      label = sch.ScheduleName;
+    } else if (sch.ScheduleDescription && sch.ScheduleDescription.trim() !== "") {
+      label = sch.ScheduleDescription;
+    }
+
+    if (label !== "") {
+      select.innerHTML += `<option value="${sch.ScheduleID}">${label}</option>`;
+    }
+  });
+}
 
   async function fetchScheduleDetails(scheduleID) {
     const res = await fetch(`/schedule_details?schedule_id=${scheduleID}`);
