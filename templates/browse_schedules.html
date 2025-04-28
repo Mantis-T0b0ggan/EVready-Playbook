@@ -113,22 +113,30 @@
         if (schedules.length > 0) {
             table.classList.remove('hidden');
 
-            // Dynamically generate the columns based on keys
-            const allKeys = Object.keys(schedules[0]);
+            // Get all unique keys (dynamic columns)
+            const allKeys = new Set();
+            schedules.forEach(schedule => {
+                Object.keys(schedule).forEach(key => allKeys.add(key));
+            });
+            const keysArray = Array.from(allKeys);
+
+            // Build table header
             let headerRow = '<tr>';
-            allKeys.forEach(key => {
+            keysArray.forEach(key => {
                 headerRow += `<th>${key}</th>`;
             });
             headerRow += '</tr>';
             thead.innerHTML = headerRow;
 
-            // Now add the rows
+            // Build table rows
             schedules.forEach(schedule => {
                 let row = '<tr>';
-                allKeys.forEach(key => {
+                keysArray.forEach(key => {
                     let value = schedule[key];
-                    if (typeof value === 'number') {
-                        value = value.toFixed(4);
+                    if (value === undefined || value === null) {
+                        value = '';
+                    } else if (typeof value === 'number') {
+                        value = value.toFixed(4); // Format decimals
                     }
                     row += `<td>${value}</td>`;
                 });
