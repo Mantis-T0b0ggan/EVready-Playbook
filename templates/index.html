@@ -56,7 +56,15 @@
     .result {
       margin-top: 20px;
       background-color: #f2f2f2;
-      padding: 15px;
+      padding: 20px;
+      border-radius: 8px;
+    }
+    ul {
+      list-style-type: none;
+      padding-left: 0;
+    }
+    ul li {
+      margin-bottom: 8px;
     }
   </style>
 </head>
@@ -133,31 +141,13 @@
   }
 
   async function fetchScheduleDetails(scheduleID) {
-  const res = await fetch(`/schedule_details?schedule_id=${scheduleID}`);
-  const data = await res.json();
-  console.log("Schedule detail response:", data);
+    const res = await fetch(`/schedule_details?schedule_id=${scheduleID}`);
+    const data = await res.json();
+    const tables = data.present_tables || [];
 
-  const tables = data.present_tables || [];
-
-  // Energy input (kWh) — show if EnergyTime_Table OR Energy_Table exists
-  const hasEnergy = tables.includes("EnergyTime_Table") || tables.includes("Energy_Table");
-  document.getElementById('kwh-section').classList.toggle('hidden', !hasEnergy);
-
-  // Demand input (kW) — show if DemandTime_Table OR Demand_Table exists
-  const hasDemand = tables.includes("DemandTime_Table") || tables.includes("Demand_Table");
-  document.getElementById('kw-section').classList.toggle('hidden', !hasDemand);
-
-  // Billing Days input — show if ServiceCharge_Table exists
-  const hasService = tables.includes("ServiceCharge_Table");
-  document.getElementById('days-section').classList.toggle('hidden', !hasService);
-
-  // Only show input fields section if at least one of them is needed
-  const anyInputs = hasEnergy || hasDemand || hasService;
-  if (anyInputs) {
-    document.getElementById('input-fields').classList.remove('hidden');
-  } else {
-    document.getElementById('input-fields').classList.add('hidden');
-    }
+    document.getElementById('kwh-section').classList.toggle('hidden', !tables.includes("EnergyTime_Table") && !tables.includes("Energy_Table"));
+    document.getElementById('kw-section').classList.toggle('hidden', !tables.includes("DemandTime_Table") && !tables.includes("Demand_Table"));
+    document.getElementById('days-section').classList.toggle('hidden', !tables.includes("ServiceCharge_Table"));
   }
 
   document.getElementById('state').addEventListener('change', e => {
@@ -213,6 +203,11 @@
     const result = await res.json();
 
     if (res.ok) {
+      let breakdownHtml = "";
+      for (const [table, amount] of Object.entries(result.breakdown)) {
+        breakdownHtml += `<li><strong>${table.replace("_", " ").replace("Table", "").replace("TIP", "").trim()}:</strong> $${amount.toFixed(2)}</li>`;
+      }
+
       resultBox.innerHTML = `
         <strong>State:</strong> ${state}<br>
         <strong>Utility ID:</strong> ${utility}<br>
@@ -221,13 +216,8 @@
         <strong>Demand:</strong> ${kw || "n/a"} kW<br>
         <strong>Days:</strong> ${days || "n/a"} days<br><br>
         <strong>Total Estimated Cost:</strong> $${result.total_cost.toFixed(2)}<br><br>
-        <ul>
-          <li><strong>Delivery Capacity Charge:</strong> $${result.delivery_charge.toFixed(2)}</li>
-          <li><strong>Demand Charges:</strong> $${result.demand_charge.toFixed(2)}</li>
-          <li><strong>Energy Charges:</strong> $${result.energy_charge.toFixed(2)}</li>
-          <li><strong>Other Charges:</strong> $${result.other_charges.toFixed(2)}</li>
-          <li><strong>Service Charges:</strong> $${result.service_charge.toFixed(2)}</li>
-        </ul>
+
+        <ul>${breakdownHtml}</ul>
       `;
     } else {
       resultBox.innerHTML = `<em>Error calculating bill: ${result.error}</em>`;
