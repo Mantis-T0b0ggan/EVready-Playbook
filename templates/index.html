@@ -133,15 +133,31 @@
   }
 
   async function fetchScheduleDetails(scheduleID) {
-    const res = await fetch(`/schedule_details?schedule_id=${scheduleID}`);
-    const data = await res.json();
-    console.log("Schedule detail response:", data);
+  const res = await fetch(`/schedule_details?schedule_id=${scheduleID}`);
+  const data = await res.json();
+  console.log("Schedule detail response:", data);
 
-    const tables = data.present_tables || [];
+  const tables = data.present_tables || [];
 
-    document.getElementById('kwh-section').classList.toggle('hidden', !tables.includes("EnergyTime_Table"));
-    document.getElementById('kw-section').classList.toggle('hidden', !tables.includes("DemandTime_Table"));
-    document.getElementById('days-section').classList.toggle('hidden', !tables.includes("ServiceCharge_Table"));
+  // Energy input (kWh) — show if EnergyTime_Table OR Energy_Table exists
+  const hasEnergy = tables.includes("EnergyTime_Table") || tables.includes("Energy_Table");
+  document.getElementById('kwh-section').classList.toggle('hidden', !hasEnergy);
+
+  // Demand input (kW) — show if DemandTime_Table OR Demand_Table exists
+  const hasDemand = tables.includes("DemandTime_Table") || tables.includes("Demand_Table");
+  document.getElementById('kw-section').classList.toggle('hidden', !hasDemand);
+
+  // Billing Days input — show if ServiceCharge_Table exists
+  const hasService = tables.includes("ServiceCharge_Table");
+  document.getElementById('days-section').classList.toggle('hidden', !hasService);
+
+  // Only show input fields section if at least one of them is needed
+  const anyInputs = hasEnergy || hasDemand || hasService;
+  if (anyInputs) {
+    document.getElementById('input-fields').classList.remove('hidden');
+  } else {
+    document.getElementById('input-fields').classList.add('hidden');
+    }
   }
 
   document.getElementById('state').addEventListener('change', e => {
