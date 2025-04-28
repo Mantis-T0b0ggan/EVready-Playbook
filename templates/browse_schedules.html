@@ -79,6 +79,10 @@
 <label for="utility">Select a Utility:</label>
 <select id="utility"></select>
 
+<button id="resetBtn" style="margin-top: 10px; background-color: #e60000; color: white; padding: 8px 12px; border: none; cursor: pointer;">
+    🔄 Reset Selection
+</button>
+
 <!-- Schedules Table -->
 <table id="scheduleTable" class="hidden">
     <thead>
@@ -161,25 +165,37 @@
         }
     }
 
-    // Event Listeners
-    document.getElementById('state').addEventListener('change', e => {
-        const selectedState = e.target.value;
-        if (selectedState) {
-            fetchUtilities(selectedState);
-        }
-        document.getElementById('utility').innerHTML = '';
-        document.getElementById('scheduleTable').classList.add('hidden');
-    });
+// Event Listeners
+document.getElementById('state').addEventListener('change', e => {
+    const selectedState = e.target.value;
+    if (selectedState) {
+        fetchUtilities(selectedState);
+    }
+    document.getElementById('utility').innerHTML = '';
+    document.getElementById('scheduleTable').classList.add('hidden');
+});
 
-    document.getElementById('utility').addEventListener('change', e => {
-        const selectedUtility = e.target.value;
-        if (selectedUtility) {
-            fetchSchedules(selectedUtility);
-        }
-    });
+// <- Closing here is important! No nesting!
 
-    // Initial load
-    fetchStates();
+document.getElementById('utility').addEventListener('change', e => {
+    const selectedUtility = e.target.value;
+    if (selectedUtility) {
+        fetchSchedules(selectedUtility);
+    }
+});
+
+// Separate reset button listener
+document.getElementById('resetBtn').addEventListener('click', () => {
+    document.getElementById('state').selectedIndex = 0;
+    document.getElementById('utility').innerHTML = '';
+    document.getElementById('scheduleTable').classList.add('hidden');
+    document.querySelector('thead').innerHTML = '';
+    document.querySelector('tbody').innerHTML = '';
+    fetchStates(); // reload states
+});
+
+// Initial load
+fetchStates();
 </script>
 </body>
 </html>
