@@ -8,16 +8,32 @@
       font-family: Arial, sans-serif;
       margin: 30px;
     }
+    nav {
+      background-color: #1B2A49;
+      padding: 10px;
+    }
+    nav a {
+      color: white;
+      text-decoration: none;
+      margin-right: 20px;
+      font-weight: bold;
+    }
+    nav a.active {
+      text-decoration: underline;
+    }
     h1 {
       color: #1B2A49;
+      margin-top: 20px;
     }
     label {
       display: block;
       margin-top: 15px;
+      font-weight: bold;
     }
     select, input {
       padding: 8px;
       width: 300px;
+      margin-bottom: 20px;
     }
     button {
       margin-top: 20px;
@@ -34,18 +50,20 @@
       margin-top: 20px;
       background-color: #f2f2f2;
       padding: 15px;
-      line-height: 1.5;
-    }
-    ul {
-      margin-top: 10px;
-      padding-left: 20px;
     }
   </style>
 </head>
 <body>
 
+<!-- Navigation Bar -->
+<nav>
+    <a href="/" class="active">Bill Estimator</a>
+    <a href="/browse_schedules">Schedule Browser</a>
+</nav>
+
 <h1>EVReady Utility Bill Estimator</h1>
 
+<!-- Existing Form Inputs -->
 <label for="state">Select a State:</label>
 <select id="state"></select>
 
@@ -61,7 +79,7 @@
     <input type="number" id="kwh">
   </div>
 
-  <div id="kw-section">
+  <div id="kw-section" class="hidden">
     <label for="kw">Monthly kW Demand:</label>
     <input type="number" id="kw">
   </div>
@@ -76,6 +94,7 @@
 
 <div class="result" id="resultBox"></div>
 
+<!-- Existing JavaScript -->
 <script>
   async function fetchStates() {
     const res = await fetch('/states');
@@ -115,10 +134,8 @@
     const tables = data.present_tables || [];
 
     document.getElementById('kwh-section').classList.toggle('hidden', !tables.includes("EnergyTime_Table"));
+    document.getElementById('kw-section').classList.toggle('hidden', !tables.includes("DemandTime_Table"));
     document.getElementById('days-section').classList.toggle('hidden', !tables.includes("ServiceCharge_Table"));
-
-    // Always show kW input for now
-    document.getElementById('kw-section').classList.remove('hidden');
   }
 
   document.getElementById('state').addEventListener('change', e => {
@@ -126,71 +143,62 @@
     fetchUtilities(state);
     document.getElementById('utility').innerHTML = '';
     document.getElementById('schedule').innerHTML = '';
-    document.getElementById('resultBox').innerHTML = '';
+    document.getElementById('input-fields').classList.add('hidden');
   });
 
   document.getElementById('utility').addEventListener('change', e => {
     const utilityID = e.target.value;
     fetchSchedules(utilityID);
-    document.getElementById('resultBox').innerHTML = '';
   });
 
   document.getElementById('schedule').addEventListener('change', e => {
     const scheduleID = e.target.value;
     fetchScheduleDetails(scheduleID);
-    document.getElementById('resultBox').innerHTML = '';
   });
 
   document.getElementById('submitBtn').addEventListener('click', async () => {
     const state = document.getElementById('state').value;
     const utility = document.getElementById('utility').value;
     const schedule = document.getElementById('schedule').value;
-    const kwh = document.getElementById('kwh').value || 0;
-    const kw = document.getElementById('kw').value || 0;
-    const days = document.getElementById('days').value || 30;
+    const kwh = document.getElementById('kwh').value;
+    const kw = document.getElementById('kw').value;
+    const days = document.getElementById('days').value;
 
     const resultBox = document.getElementById('resultBox');
-    resultBox.innerHTML = "⏳ Calculating...";
 
-    try {
-      const res = await fetch('/calculate_bill', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          schedule_id: schedule,
-          usage_kwh: kwh,
-          demand_kw: kw,
-          billing_days: days
-        })
-      });
+    const payload = {
+      schedule_id: schedule,
+      usage_kwh: kwh,
+      demand_kw: kw,
+      billing_days: days
+    };
 
-      const data = await res.json();
+    const res = await fetch('/calculate_bill', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
 
-      if (data.error) {
-        resultBox.innerHTML = `<strong>Error:</strong> ${data.error}`;
-      } else {
-        let breakdownHtml = "";
-        for (const [label, value] of Object.entries(data.breakdown)) {
-          breakdownHtml += `<li>${label}: $${value.toFixed(2)}</li>`;
-        }
-
-        resultBox.innerHTML = `
-          <strong>State:</strong> ${state}<br>
-          <strong>Utility ID:</strong> ${utility}<br>
-          <strong>Schedule ID:</strong> ${schedule}<br>
-          <strong>Usage:</strong> ${kwh} kWh<br>
-          <strong>Demand:</strong> ${kw} kW<br>
-          <strong>Days:</strong> ${days} days<br><br>
-          <strong>Total Estimated Cost:</strong> $${data.total_cost.toFixed(2)}<br>
-          <ul>${breakdownHtml}</ul>
-        `;
+    const data = await res.json();
+    if (data.error) {
+      resultBox.innerHTML = `<span style="color:red;">Error: ${data.error}</span>`;
+    } else {
+      let breakdownHtml = "";
+      for (const [label, value] of Object.entries(data.breakdown)) {
+        breakdownHtml += `<li>${label}: $${value.toFixed(2)}</li>`;
       }
-
-    } catch (err) {
-      console.error(err);
-      resultBox.innerHTML = `<strong>Request failed:</strong> ${err.message}`;
+      resultBox.innerHTML = `
+        <strong>State:</strong> ${state}<br>
+        <strong>Utility ID:</strong> ${utility}<br>
+        <strong>Schedule ID:</strong> ${schedule}<br>
+        <strong>Usage:</strong> ${kwh} kWh<br>
+        <strong>Demand:</strong> ${kw} kW<br>
+        <strong>Days:</strong> ${days} days<br>
+        <strong>Total Estimated Cost:</strong> $${data.total_cost.toFixed(2)}<br>
+        <ul>${breakdownHtml}</ul>
+      `;
     }
   });
 
