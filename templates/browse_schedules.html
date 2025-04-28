@@ -100,18 +100,39 @@
         });
     }
 
-    // Fetch schedules for selected utility
+    // Fetch schedules and display dynamically
     async function fetchSchedules(utilityId) {
         const res = await fetch(`/get_schedules_by_utility?utility_id=${utilityId}`);
         const schedules = await res.json();
         const table = document.getElementById('scheduleTable');
+        const thead = table.querySelector('thead');
         const tbody = table.querySelector('tbody');
         tbody.innerHTML = '';
+        thead.innerHTML = '';
 
         if (schedules.length > 0) {
             table.classList.remove('hidden');
+
+            // Dynamically generate the columns based on keys
+            const allKeys = Object.keys(schedules[0]);
+            let headerRow = '<tr>';
+            allKeys.forEach(key => {
+                headerRow += `<th>${key}</th>`;
+            });
+            headerRow += '</tr>';
+            thead.innerHTML = headerRow;
+
+            // Now add the rows
             schedules.forEach(schedule => {
-                const row = `<tr><td>${schedule.ScheduleID}</td><td>${schedule.ScheduleName}</td></tr>`;
+                let row = '<tr>';
+                allKeys.forEach(key => {
+                    let value = schedule[key];
+                    if (typeof value === 'number') {
+                        value = value.toFixed(4);
+                    }
+                    row += `<td>${value}</td>`;
+                });
+                row += '</tr>';
                 tbody.innerHTML += row;
             });
         } else {
@@ -139,6 +160,5 @@
     // Initial load
     fetchStates();
 </script>
-
 </body>
 </html>
