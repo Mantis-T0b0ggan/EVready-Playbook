@@ -64,9 +64,8 @@
             position: sticky;
             top: 50px;
             z-index: 500;
-            max-width: 200px; /* limit header width */
-            white-space: normal; /* allow text wrap */
-            word-wrap: break-word;
+            max-width: 200px;
+            white-space: normal;
             overflow-wrap: break-word;
         }
         tr:nth-child(even) {
@@ -143,7 +142,7 @@
 
             const keysArray = Array.from(allKeys);
 
-            // 🧹 Filter keys: Only keep keys with at least one non-null value
+            // Filter keys: Only keep keys with at least one non-null value
             const filteredKeys = keysArray.filter(key => 
                 schedules.some(schedule => schedule[key] !== null && schedule[key] !== '' && schedule[key] !== undefined)
             );
@@ -165,7 +164,7 @@
                         value = '';
                     } else if (typeof value === 'number') {
                         if (key.toLowerCase().includes('id')) {
-                            value = Math.round(value); // Make IDs integers
+                            value = Math.round(value); // IDs like ScheduleID become integers
                         } else {
                             value = value.toFixed(4); // Keep Energy/Demand rates at 4 decimals
                         }
@@ -203,7 +202,7 @@
         document.getElementById('scheduleTable').classList.add('hidden');
         document.querySelector('thead').innerHTML = '';
         document.querySelector('tbody').innerHTML = '';
-        fetchStates();
+        fetchStates(); // Reload states
     });
 
     // Initial load
