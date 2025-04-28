@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Schedule Browser - EVReady</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 30px;
+        }
+        nav {
+            background-color: #1B2A49;
+            padding: 10px;
+        }
+        nav a {
+            color: white;
+            text-decoration: none;
+            margin-right: 20px;
+            font-weight: bold;
+        }
+        nav a.active {
+            text-decoration: underline;
+        }
+        h1 {
+            color: #1B2A49;
+            margin-top: 20px;
+        }
+        label {
+            display: block;
+            margin-top: 15px;
+            font-weight: bold;
+        }
+        select {
+            padding: 8px;
+            width: 300px;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 80%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Navigation Bar -->
+<nav>
+    <a href="/">Bill Estimator</a>
+    <a href="/browse_schedules" class="active">Schedule Browser</a>
+</nav>
+
+<h1>Schedule Browser</h1>
+
+<!-- Dropdowns -->
+<label for="state">Select a State:</label>
+<select id="state"></select>
+
+<label for="utility">Select a Utility:</label>
+<select id="utility"></select>
+
+<!-- Schedules Table -->
+<table id="scheduleTable" class="hidden">
+    <thead>
+        <tr>
+            <th>Schedule ID</th>
+            <th>Schedule Name</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<script>
+    // Fetch and load states
+    async function fetchStates() {
+        const res = await fetch('/get_states');
+        const states = await res.json();
+        const stateSelect = document.getElementById('state');
+        stateSelect.innerHTML = '<option value="">-- Select a State --</option>';
+        states.forEach(state => {
+            stateSelect.innerHTML += `<option value="${state}">${state}</option>`;
+        });
+    }
+
+    // Fetch utilities for a selected state
+    async function fetchUtilities(state) {
+        const res = await fetch(`/get_utilities_by_state?state=${state}`);
+        const utilities = await res.json();
+        const utilitySelect = document.getElementById('utility');
+        utilitySelect.innerHTML = '<option value="">-- Select a Utility --</option>';
+        utilities.forEach(util => {
+            utilitySelect.innerHTML += `<option value="${util.UtilityID}">${util.UtilityName}</option>`;
+        });
+    }
+
+    // Fetch schedules for selected utility
+    async function fetchSchedules(utilityId) {
+        const res = await fetch(`/get_schedules_by_utility?utility_id=${utilityId}`);
+        const schedules = await res.json();
+        const table = document.getElementById('scheduleTable');
+        const tbody = table.querySelector('tbody');
+        tbody.innerHTML = '';
+
+        if (schedules.length > 0) {
+            table.classList.remove('hidden');
+            schedules.forEach(schedule => {
+                const row = `<tr><td>${schedule.ScheduleID}</td><td>${schedule.ScheduleName}</td></tr>`;
+                tbody.innerHTML += row;
+            });
+        } else {
+            table.classList.add('hidden');
+        }
+    }
+
+    // Event Listeners
+    document.getElementById('state').addEventListener('change', e => {
+        const selectedState = e.target.value;
+        if (selectedState) {
+            fetchUtilities(selectedState);
+        }
+        document.getElementById('utility').innerHTML = '';
+        document.getElementById('scheduleTable').classList.add('hidden');
+    });
+
+    document.getElementById('utility').addEventListener('change', e => {
+        const selectedUtility = e.target.value;
+        if (selectedUtility) {
+            fetchSchedules(selectedUtility);
+        }
+    });
+
+    // Initial load
+    fetchStates();
+</script>
+
+</body>
+</html>
