@@ -214,7 +214,7 @@ def get_schedules_browser():
         if len(schedule_info.keys()) > 2:
             full_schedule_info.append(schedule_info)
 
-return jsonify(full_schedule_info)
+    return jsonify(full_schedule_info)
 
 # ---- RUN APP ----
 
