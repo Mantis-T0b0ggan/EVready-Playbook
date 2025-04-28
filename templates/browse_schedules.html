@@ -2,75 +2,83 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Schedule Browser - EVReady</title>
+    <title>EVReady - Schedule Browser</title>
     <style>
-    body {
-        font-family: Arial, sans-serif;
-        margin: 30px;
-    }
-    nav {
-        background-color: #1B2A49;
-        padding: 10px;
-        position: sticky;
-        top: 0;
-        z-index: 1000;
-    }
-    nav a {
-        color: white;
-        text-decoration: none;
-        margin-right: 20px;
-        font-weight: bold;
-    }
-    nav a.active {
-        text-decoration: underline;
-    }
-    h1 {
-        color: #1B2A49;
-        margin-top: 20px;
-    }
-    label {
-        display: block;
-        margin-top: 15px;
-        font-weight: bold;
-    }
-    select {
-        padding: 8px;
-        width: 300px;
-        margin-bottom: 20px;
-    }
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 20px;
-        font-size: 12px; /* smaller for easier fitting */
-    }
-    th, td {
-        padding: 8px;
-        border: 1px solid #ccc;
-        text-align: center;
-        vertical-align: middle;
-        word-break: break-word; /* wrap long text */
-    }
-    th {
-        background-color: #f2f2f2;
-        position: sticky;
-        top: 50px; /* adjust so it doesn't hide under nav */
-        z-index: 500;
-    }
-    tr:nth-child(even) {
-        background-color: #fafafa;
-    }
-</style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 30px;
+        }
+        nav {
+            background-color: #1B2A49;
+            padding: 10px;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        nav a {
+            color: white;
+            text-decoration: none;
+            margin-right: 20px;
+            font-weight: bold;
+        }
+        nav a.active {
+            text-decoration: underline;
+        }
+        h1 {
+            color: #1B2A49;
+            margin-top: 20px;
+        }
+        label {
+            display: block;
+            margin-top: 15px;
+            font-weight: bold;
+        }
+        select {
+            padding: 8px;
+            width: 300px;
+            margin-bottom: 10px;
+        }
+        button {
+            margin-top: 20px;
+            padding: 8px 12px;
+            background-color: #e60000;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            font-size: 12px;
+        }
+        th, td {
+            padding: 8px;
+            border: 1px solid #ccc;
+            text-align: center;
+            vertical-align: middle;
+            word-break: break-word;
+        }
+        th {
+            background-color: #f2f2f2;
+            position: sticky;
+            top: 50px;
+            z-index: 500;
+        }
+        tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+    </style>
 </head>
+
 <body>
 
-<!-- Navigation Bar -->
 <nav>
     <a href="/">Bill Estimator</a>
     <a href="/browse_schedules" class="active">Schedule Browser</a>
 </nav>
 
-<h1>Schedule Browser</h1>
+<h1>Browse Utility Schedules</h1>
 
 <!-- Dropdowns -->
 <label for="state">Select a State:</label>
@@ -79,45 +87,38 @@
 <label for="utility">Select a Utility:</label>
 <select id="utility"></select>
 
-<button id="resetBtn" style="margin-top: 10px; background-color: #e60000; color: white; padding: 8px 12px; border: none; cursor: pointer;">
+<!-- Reset Button -->
+<button id="resetBtn">
     🔄 Reset Selection
 </button>
 
-<!-- Schedules Table -->
+<!-- Table -->
 <table id="scheduleTable" class="hidden">
-    <thead>
-        <tr>
-            <th>Schedule ID</th>
-            <th>Schedule Name</th>
-        </tr>
-    </thead>
+    <thead></thead>
     <tbody></tbody>
 </table>
 
 <script>
-    // Fetch and load states
     async function fetchStates() {
         const res = await fetch('/get_states');
         const states = await res.json();
-        const stateSelect = document.getElementById('state');
-        stateSelect.innerHTML = '<option value="">-- Select a State --</option>';
+        const select = document.getElementById('state');
+        select.innerHTML = '<option value="">-- Select a State --</option>';
         states.forEach(state => {
-            stateSelect.innerHTML += `<option value="${state}">${state}</option>`;
+            select.innerHTML += `<option value="${state}">${state}</option>`;
         });
     }
 
-    // Fetch utilities for a selected state
     async function fetchUtilities(state) {
         const res = await fetch(`/get_utilities_by_state?state=${state}`);
         const utilities = await res.json();
-        const utilitySelect = document.getElementById('utility');
-        utilitySelect.innerHTML = '<option value="">-- Select a Utility --</option>';
+        const select = document.getElementById('utility');
+        select.innerHTML = '<option value="">-- Select a Utility --</option>';
         utilities.forEach(util => {
-            utilitySelect.innerHTML += `<option value="${util.UtilityID}">${util.UtilityName}</option>`;
+            select.innerHTML += `<option value="${util.UtilityID}">${util.UtilityName}</option>`;
         });
     }
 
-    // Fetch schedules and display dynamically
     async function fetchSchedules(utilityId) {
         const res = await fetch(`/get_schedules_by_utility?utility_id=${utilityId}`);
         const schedules = await res.json();
@@ -130,16 +131,22 @@
         if (schedules.length > 0) {
             table.classList.remove('hidden');
 
-            // Get all unique keys (dynamic columns)
+            // Get all unique keys
             const allKeys = new Set();
             schedules.forEach(schedule => {
                 Object.keys(schedule).forEach(key => allKeys.add(key));
             });
+
             const keysArray = Array.from(allKeys);
+
+            // 🧹 Filter keys: Only keep keys with at least one real value
+            const filteredKeys = keysArray.filter(key => 
+                schedules.some(schedule => schedule[key] !== null && schedule[key] !== '' && schedule[key] !== undefined)
+            );
 
             // Build table header
             let headerRow = '<tr>';
-            keysArray.forEach(key => {
+            filteredKeys.forEach(key => {
                 headerRow += `<th>${key}</th>`;
             });
             headerRow += '</tr>';
@@ -148,12 +155,12 @@
             // Build table rows
             schedules.forEach(schedule => {
                 let row = '<tr>';
-                keysArray.forEach(key => {
+                filteredKeys.forEach(key => {
                     let value = schedule[key];
                     if (value === undefined || value === null) {
                         value = '';
                     } else if (typeof value === 'number') {
-                        value = value.toFixed(4); // Format decimals
+                        value = value.toFixed(4); // Format numbers cleanly
                     }
                     row += `<td>${value}</td>`;
                 });
@@ -165,37 +172,35 @@
         }
     }
 
-// Event Listeners
-document.getElementById('state').addEventListener('change', e => {
-    const selectedState = e.target.value;
-    if (selectedState) {
-        fetchUtilities(selectedState);
-    }
-    document.getElementById('utility').innerHTML = '';
-    document.getElementById('scheduleTable').classList.add('hidden');
-});
+    // Event Listeners
+    document.getElementById('state').addEventListener('change', e => {
+        const selectedState = e.target.value;
+        if (selectedState) {
+            fetchUtilities(selectedState);
+        }
+        document.getElementById('utility').innerHTML = '';
+        document.getElementById('scheduleTable').classList.add('hidden');
+    });
 
-// <- Closing here is important! No nesting!
+    document.getElementById('utility').addEventListener('change', e => {
+        const selectedUtility = e.target.value;
+        if (selectedUtility) {
+            fetchSchedules(selectedUtility);
+        }
+    });
 
-document.getElementById('utility').addEventListener('change', e => {
-    const selectedUtility = e.target.value;
-    if (selectedUtility) {
-        fetchSchedules(selectedUtility);
-    }
-});
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        document.getElementById('state').selectedIndex = 0;
+        document.getElementById('utility').innerHTML = '';
+        document.getElementById('scheduleTable').classList.add('hidden');
+        document.querySelector('thead').innerHTML = '';
+        document.querySelector('tbody').innerHTML = '';
+        fetchStates();
+    });
 
-// Separate reset button listener
-document.getElementById('resetBtn').addEventListener('click', () => {
-    document.getElementById('state').selectedIndex = 0;
-    document.getElementById('utility').innerHTML = '';
-    document.getElementById('scheduleTable').classList.add('hidden');
-    document.querySelector('thead').innerHTML = '';
-    document.querySelector('tbody').innerHTML = '';
-    fetchStates(); // reload states
-});
-
-// Initial load
-fetchStates();
+    // Initial load
+    fetchStates();
 </script>
+
 </body>
 </html>
