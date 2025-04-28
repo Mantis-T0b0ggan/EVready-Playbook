@@ -162,7 +162,7 @@ def get_utilities_browser():
 
 @app.route("/get_schedules_by_utility")
 def get_schedules_browser():
-    """Fetch schedules with TIP table details if present."""
+    """Fetch schedules with ALL TIP table details if present."""
     utility_id = request.args.get("utility_id")
 
     # Get schedules tied to utility
@@ -175,46 +175,96 @@ def get_schedules_browser():
     for sched in schedules:
         schedule_id = sched.get("ScheduleID")
         schedule_name = sched.get("ScheduleName")
+        
+        # Ensure ScheduleID is an integer (remove decimals)
+        try:
+            schedule_id = int(float(schedule_id))
+        except:
+            pass
+
         schedule_info = {
             "ScheduleID": schedule_id,
             "ScheduleName": schedule_name
         }
 
-        # Pull Energy Rate (EnergyTime_Table)
-        energy_rows = supabase.table("EnergyTime_Table").select("RatekWh").eq("ScheduleID", schedule_id).execute().data
-        if energy_rows:
-            try:
-                ratekwh = float(energy_rows[0].get("RatekWh", 0))
-                if ratekwh > 0:
-                    schedule_info["Energy Rate ($/kWh)"] = ratekwh
-            except:
-                pass
+        # --- Energy Time-Based Rates (EnergyTime_Table) ---
+        energy_time = supabase.table("EnergyTime_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        for idx, row in enumerate(energy_time):
+            rate = row.get("RatekWh")
+            if rate:
+                schedule_info[f"EnergyTime Rate {idx+1} ($/kWh)"] = rate
 
-        # Pull Demand Rate (DemandTime_Table)
-        demand_rows = supabase.table("DemandTime_Table").select("RatekW").eq("ScheduleID", schedule_id).execute().data
-        if demand_rows:
-            try:
-                ratekw = float(demand_rows[0].get("RatekW", 0))
-                if ratekw > 0:
-                    schedule_info["Demand Rate ($/kW)"] = ratekw
-            except:
-                pass
+        # --- Flat Energy Rates and Surcharges (Energy_Table) ---
+        energy_flat = supabase.table("Energy_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        for row in energy_flat:
+            desc = row.get("Description", "").strip()
+            rate = row.get("RatekWh")
+            if desc and rate:
+                schedule_info[f"Energy Flat - {desc} ($/kWh)"] = rate
 
-        # Pull Service Charge (ServiceCharge_Table)
-        service_rows = supabase.table("ServiceCharge_Table").select("Rate").eq("ScheduleID", schedule_id).execute().data
-        if service_rows:
-            try:
-                rate = float(service_rows[0].get("Rate", 0))
-                if rate > 0:
-                    schedule_info["Service Charge ($/month)"] = rate
-            except:
-                pass
+        # --- Demand Time-Based Rates (DemandTime_Table) ---
+        demand_time = supabase.table("DemandTime_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        for idx, row in enumerate(demand_time):
+            rate = row.get("RatekW")
+            if rate:
+                schedule_info[f"DemandTime Rate {idx+1} ($/kW)"] = rate
 
-        # Only add schedules that have at least one detail (besides ScheduleID/Name)
-        if len(schedule_info.keys()) > 2:
-            full_schedule_info.append(schedule_info)
+        # --- Flat Demand Rates (Demand_Table) ---
+        demand_flat = supabase.table("Demand_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        for row in demand_flat:
+            rate = row.get("RatekW")
+            if rate:
+                schedule_info["Demand Flat Rate ($/kW)"] = rate
+
+        # --- Incremental Energy Rates (IncrementalEnergy_Table) ---
+        inc_energy = supabase.table("IncrementalEnergy_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        for idx, row in enumerate(inc_energy):
+            rate = row.get("RatekWh")
+            if rate:
+                schedule_info[f"Incremental Energy Rate {idx+1} ($/kWh)"] = rate
+
+        # --- Incremental Demand Rates (IncrementalDemand_Table) ---
+        inc_demand = supabase.table("IncrementalDemand_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        for idx, row in enumerate(inc_demand):
+            rate = row.get("RatekW")
+            if rate:
+                schedule_info[f"Incremental Demand Rate {idx+1} ($/kW)"] = rate
+
+        # --- Service Charges (ServiceCharge_Table) ---
+        service = supabase.table("ServiceCharge_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        for row in service:
+            rate = row.get("Rate")
+            if rate:
+                schedule_info["Service Charge ($/month)"] = rate
+
+        # --- Other Fixed Charges (OtherCharges_Table) ---
+        other = supabase.table("OtherCharges_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        for row in other:
+            desc = row.get("Description", "").strip()
+            charge = row.get("ChargeType")
+            if desc and charge:
+                schedule_info[f"Other Charge - {desc} ($)" ] = charge
+
+        # --- Percent-Based Charges (Percentages_Table) ---
+        percentages = supabase.table("Percentages_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        for row in percentages:
+            desc = row.get("Description", "").strip()
+            percent = row.get("Per_cent")
+            if desc and percent:
+                schedule_info[f"Percentage Charge - {desc} ($/kWh)"] = percent
+
+        # --- Tax Rates (TaxInfo_Table) ---
+        tax = supabase.table("TaxInfo_Table").select("*").eq("ScheduleID", schedule_id).execute().data
+        for row in tax:
+            percent = row.get("Per_cent")
+            if percent:
+                schedule_info["Tax Rate (%)"] = percent
+
+        # Add the fully built schedule
+        full_schedule_info.append(schedule_info)
 
     return jsonify(full_schedule_info)
+
 
 # ---- RUN APP ----
 
