@@ -215,8 +215,7 @@ def get_schedules_browser():
             full_schedule_info.append(schedule_info)
 
 return jsonify(full_schedule_info)
-
-            })
+})
 
 # ---- RUN APP ----
 
