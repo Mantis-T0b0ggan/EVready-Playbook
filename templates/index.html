@@ -11,6 +11,9 @@
     nav {
       background-color: #1B2A49;
       padding: 10px;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
     }
     nav a {
       color: white;
@@ -33,15 +36,19 @@
     select, input {
       padding: 8px;
       width: 300px;
-      margin-bottom: 20px;
+      margin-bottom: 10px;
     }
     button {
-      margin-top: 20px;
-      padding: 10px 15px;
+      margin-top: 10px;
+      padding: 8px 12px;
       background-color: #1B2A49;
       color: white;
       border: none;
       cursor: pointer;
+    }
+    #resetBtn {
+      background-color: #e60000;
+      margin-left: 10px;
     }
     .hidden {
       display: none;
@@ -53,17 +60,16 @@
     }
   </style>
 </head>
+
 <body>
 
-<!-- Navigation Bar -->
 <nav>
-    <a href="/" class="active">Bill Estimator</a>
-    <a href="/browse_schedules">Schedule Browser</a>
+  <a href="/" class="active">Bill Estimator</a>
+  <a href="/browse_schedules">Schedule Browser</a>
 </nav>
 
 <h1>EVReady Utility Bill Estimator</h1>
 
-<!-- Existing Form Inputs -->
 <label for="state">Select a State:</label>
 <select id="state"></select>
 
@@ -91,26 +97,26 @@
 </div>
 
 <button id="submitBtn">Estimate Bill</button>
+<button id="resetBtn">🔄 Reset Selection</button>
 
 <div class="result" id="resultBox"></div>
 
-<!-- Existing JavaScript -->
 <script>
   async function fetchStates() {
     const res = await fetch('/states');
     const states = await res.json();
     const select = document.getElementById('state');
-    select.innerHTML = '<option value="">-- Select --</option>';
+    select.innerHTML = '<option value="">-- Select a State --</option>';
     states.forEach(state => {
       select.innerHTML += `<option value="${state}">${state}</option>`;
     });
   }
 
   async function fetchUtilities(state) {
-    const res = await fetch(`/utilities?state=${state}`);
+    const res = await fetch(`/get_utilities_by_state?state=${state}`);
     const data = await res.json();
     const select = document.getElementById('utility');
-    select.innerHTML = '<option value="">-- Select --</option>';
+    select.innerHTML = '<option value="">-- Select a Utility --</option>';
     data.forEach(util => {
       select.innerHTML += `<option value="${util.UtilityID}">${util.UtilityName}</option>`;
     });
@@ -120,7 +126,7 @@
     const res = await fetch(`/schedules?utility_id=${utilityID}`);
     const data = await res.json();
     const select = document.getElementById('schedule');
-    select.innerHTML = '<option value="">-- Select --</option>';
+    select.innerHTML = '<option value="">-- Select a Schedule --</option>';
     data.forEach(sch => {
       select.innerHTML += `<option value="${sch.ScheduleID}">${sch.ScheduleName}</option>`;
     });
@@ -143,6 +149,7 @@
     fetchUtilities(state);
     document.getElementById('utility').innerHTML = '';
     document.getElementById('schedule').innerHTML = '';
+    document.getElementById('resultBox').innerHTML = '';
     document.getElementById('input-fields').classList.add('hidden');
   });
 
@@ -154,6 +161,7 @@
   document.getElementById('schedule').addEventListener('change', e => {
     const scheduleID = e.target.value;
     fetchScheduleDetails(scheduleID);
+    document.getElementById('input-fields').classList.remove('hidden');
   });
 
   document.getElementById('submitBtn').addEventListener('click', async () => {
@@ -166,11 +174,16 @@
 
     const resultBox = document.getElementById('resultBox');
 
+    if (!state || !utility || !schedule) {
+      resultBox.innerHTML = `<em>Please complete all selections before estimating the bill.</em>`;
+      return;
+    }
+
     const payload = {
       schedule_id: schedule,
-      usage_kwh: kwh,
-      demand_kw: kw,
-      billing_days: days
+      kwh: kwh || 0,
+      kw: kw || 0,
+      days: days || 0
     };
 
     const res = await fetch('/calculate_bill', {
@@ -181,25 +194,40 @@
       body: JSON.stringify(payload)
     });
 
-    const data = await res.json();
-    if (data.error) {
-      resultBox.innerHTML = `<span style="color:red;">Error: ${data.error}</span>`;
-    } else {
-      let breakdownHtml = "";
-      for (const [label, value] of Object.entries(data.breakdown)) {
-        breakdownHtml += `<li>${label}: $${value.toFixed(2)}</li>`;
-      }
+    const result = await res.json();
+
+    if (res.ok) {
       resultBox.innerHTML = `
         <strong>State:</strong> ${state}<br>
         <strong>Utility ID:</strong> ${utility}<br>
         <strong>Schedule ID:</strong> ${schedule}<br>
-        <strong>Usage:</strong> ${kwh} kWh<br>
-        <strong>Demand:</strong> ${kw} kW<br>
-        <strong>Days:</strong> ${days} days<br>
-        <strong>Total Estimated Cost:</strong> $${data.total_cost.toFixed(2)}<br>
-        <ul>${breakdownHtml}</ul>
+        <strong>Usage:</strong> ${kwh || "n/a"} kWh<br>
+        <strong>Demand:</strong> ${kw || "n/a"} kW<br>
+        <strong>Days:</strong> ${days || "n/a"} days<br><br>
+        <strong>Total Estimated Cost:</strong> $${result.total_cost.toFixed(2)}<br><br>
+        <ul>
+          <li><strong>Delivery Capacity Charge:</strong> $${result.delivery_charge.toFixed(2)}</li>
+          <li><strong>Demand Charges:</strong> $${result.demand_charge.toFixed(2)}</li>
+          <li><strong>Energy Charges:</strong> $${result.energy_charge.toFixed(2)}</li>
+          <li><strong>Other Charges:</strong> $${result.other_charges.toFixed(2)}</li>
+          <li><strong>Service Charges:</strong> $${result.service_charge.toFixed(2)}</li>
+        </ul>
       `;
+    } else {
+      resultBox.innerHTML = `<em>Error calculating bill: ${result.error}</em>`;
     }
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    document.getElementById('state').selectedIndex = 0;
+    document.getElementById('utility').innerHTML = '';
+    document.getElementById('schedule').innerHTML = '';
+    document.getElementById('kwh').value = '';
+    document.getElementById('kw').value = '';
+    document.getElementById('days').value = '';
+    document.getElementById('input-fields').classList.add('hidden');
+    document.getElementById('resultBox').innerHTML = '';
+    fetchStates();
   });
 
   fetchStates();
