@@ -64,7 +64,11 @@
             position: sticky;
             top: 50px;
             z-index: 500;
-        }
+            max-width: 200px; /* 🆕 Limit maximum width of each column */
+            white-space: normal; /* 🆕 Allow text to wrap onto multiple lines */
+            word-wrap: break-word; /* 🆕 Break long words if needed */
+            overflow-wrap: break-word; /* 🆕 Alternative for better browser support */
+            }
         tr:nth-child(even) {
             background-color: #fafafa;
         }
