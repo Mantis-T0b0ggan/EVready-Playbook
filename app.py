@@ -65,17 +65,20 @@ def get_utilities_by_state():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# GET Schedules for a selected Utility
+# GET Schedules for a selected Utility (FIXED VERSION!)
 @app.route("/schedules")
 def get_schedules():
     utility_id = request.args.get("utility_id")
     try:
-        result = supabase.table("Schedule_Table").select("ScheduleID, ScheduleName").eq("UtilityID", utility_id).execute()
+        result = supabase.table("Schedule_Table") \
+            .select("ScheduleID, ScheduleName, ScheduleDescription") \
+            .eq("UtilityID", utility_id) \
+            .execute()
         return jsonify(result.data)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# GET Schedule Details (used for dynamic inputs)
+# GET Schedule Details (used for showing dynamic input fields)
 @app.route("/schedule_details")
 def get_schedule_details():
     schedule_id = request.args.get("schedule_id")
@@ -115,7 +118,7 @@ def get_schedule_details():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# POST Calculate Bill
+# POST Calculate Estimated Bill
 @app.route("/calculate_bill", methods=["POST"])
 def calculate_bill():
     try:
@@ -125,43 +128,44 @@ def calculate_bill():
         demand_kw = float(data.get("kw", 0))
         billing_days = int(data.get("days", 0))
 
-        total_cost = 0.0
-        breakdown = {}
+        charges = {}
 
-        table_charge_map = {
-            "DemandTime_Table": {"field": "RatekW", "multiplier": demand_kw},
-            "Demand_Table": {"field": "RatekW", "multiplier": demand_kw},
-            "EnergyTime_Table": {"field": "RatekWh", "multiplier": usage_kwh},
-            "Energy_Table": {"field": "RatekWh", "multiplier": usage_kwh},
-            "IncrementalDemand_Table": {"field": "RatekW", "multiplier": demand_kw},
-            "IncrementalEnergy_Table": {"field": "RatekWh", "multiplier": usage_kwh},
-            "ReactiveDemand_Table": {"field": "RatekVAR", "multiplier": demand_kw},
-            "OtherCharges_Table": {"field": "ChargeType", "multiplier": 1},
-            "ServiceCharge_Table": {"field": "Rate", "multiplier": 1},
-            "TaxInfo_Table": {"field": "ChargeType", "multiplier": 1},
-            "Percentages_Table": {"field": "PercentCharge", "multiplier": 1},
-            "Notes_Table": {"field": None, "multiplier": 0}  # Notes are non-financial
+        # Define mapping: {TableName: (Field, MultiplierType)}
+        table_field_mapping = {
+            "DemandTime_Table": ("RatekW", "demand"),
+            "Demand_Table": ("RatekW", "demand"),
+            "EnergyTime_Table": ("RatekWh", "usage"),
+            "Energy_Table": ("RatekWh", "usage"),
+            "IncrementalDemand_Table": ("RatekW", "demand"),
+            "IncrementalEnergy_Table": ("RatekWh", "usage"),
+            "ReactiveDemand_Table": ("RatekVAR", "demand"),  # VAR demand, typically reactive demand
+            "ServiceCharge_Table": ("Rate", "flat"),
+            "OtherCharges_Table": ("ChargeType", "flat")
         }
 
-        for table, config in table_charge_map.items():
-            field = config["field"]
-            multiplier = config["multiplier"]
+        total_cost = 0.0
 
-            if not field:
-                continue  # Skip Notes table
+        for table, (field, multiplier) in table_field_mapping.items():
+            records = supabase.table(table).select("*").eq("ScheduleID", schedule_id).execute().data
+            if records:
+                subtotal = 0.0
+                for record in records:
+                    rate = record.get(field, 0)
+                    if rate is None:
+                        rate = 0
 
-            rows = supabase.table(table).select("*").eq("ScheduleID", schedule_id).execute().data
+                    if multiplier == "usage":
+                        subtotal += rate * usage_kwh
+                    elif multiplier == "demand":
+                        subtotal += rate * demand_kw
+                    elif multiplier == "flat":
+                        subtotal += rate
 
-            if rows:
-                table_total = sum(
-                    (item.get(field, 0) or 0) * multiplier for item in rows
-                )
-                if table_total:
-                    breakdown[table] = table_total
-                    total_cost += table_total
+                charges[table.replace("_Table", "")] = subtotal
+                total_cost += subtotal
 
         return jsonify({
-            "breakdown": breakdown,
+            **charges,
             "total_cost": total_cost
         })
 
