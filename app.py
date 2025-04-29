@@ -559,13 +559,12 @@ def calculate_bill():
             "breakdown": detailed_breakdown,
             "total_cost": total_cost
         })
-        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/compare_rates")
 def compare_rates():
     return render_template("compare_rates.html")
-    
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 # ----------------------
 # RUN APP
