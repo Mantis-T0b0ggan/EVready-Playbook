@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>EVReady Rate Comparison Tool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 30px;
+    }
+    nav {
+      background-color: #1B2A49;
+      padding: 10px;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+    nav a {
+      color: white;
+      text-decoration: none;
+      margin-right: 20px;
+      font-weight: bold;
+    }
+    nav a.active {
+      text-decoration: underline;
+    }
+    h1 {
+      color: #1B2A49;
+      margin-top: 20px;
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    select, input {
+      padding: 8px;
+      width: 300px;
+      margin-bottom: 10px;
+    }
+    button {
+      margin-top: 10px;
+      padding: 8px 12px;
+      background-color: #1B2A49;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    #resetBtn {
+      background-color: #e60000;
+      margin-left: 10px;
+    }
+    .hidden {
+      display: none;
+    }
+    .result {
+      margin-top: 20px;
+      background-color: #f2f2f2;
+      padding: 20px;
+      border-radius: 8px;
+    }
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    .comparison-table th, .comparison-table td {
+      border: 1px solid #ddd;
+      padding: 12px;
+      text-align: center;
+    }
+    .comparison-table th {
+      background-color: #1B2A49;
+      color: white;
+    }
+    .comparison-table tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    .comparison-table .header-row {
+      background-color: #1B2A49;
+      color: white;
+      font-weight: bold;
+    }
+    .comparison-table .subheader-row {
+      background-color: #4682B4;
+      color: white;
+    }
+    .comparison-table .best-value {
+      background-color: #a8e6a8;
+    }
+    .comparison-table .current-value {
+      background-color: #ffeb99;
+    }
+    .comparison-table .risk-value {
+      background-color: #ffb3b3;
+    }
+    .add-rate-btn {
+      background-color: #4682B4;
+      margin-top: 15px;
+    }
+    #compareRatesSection {
+      margin-top: 20px;
+    }
+    .time-period-row td:first-child {
+      background-color: #6495ED;
+      color: white;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+
+<nav>
+  <a href="/">Bill Estimator</a>
+  <a href="/browse_schedules">Schedule Browser</a>
+  <a href="/compare_rates" class="active">Rate Comparison</a>
+</nav>
+
+<h1>EVReady Rate Comparison Tool</h1>
+
+<div id="inputs-section">
+  <label for="state">Select a State:</label>
+  <select id="state"></select>
+
+  <label for="utility">Select a Utility:</label>
+  <select id="utility"></select>
+
+  <label for="base-schedule">Select Your Current Rate:</label>
+  <select id="base-schedule"></select>
+
+  <div id="input-fields" class="hidden">
+    <div id="kwh-section" class="hidden">
+      <label for="kwh">Monthly kWh Usage:</label>
+      <input type="number" id="kwh" min="0">
+    </div>
+
+    <div id="kw-section" class="hidden">
+      <label for="kw">Monthly kW Demand:</label>
+      <input type="number" id="kw" min="0">
+    </div>
+
+    <div id="days-section" class="hidden">
+      <label for="days">Billing Days:</label>
+      <input type="number" id="days" min="1" value="30">
+    </div>
+    
+    <div id="voltage-section">
+      <label for="voltage">Voltage Level (kV):</label>
+      <input type="number" id="voltage" min="0" step="0.1" placeholder="Leave blank if unknown">
+      <small style="display: block; color: #666;">Some rates vary by voltage. Leave blank if not applicable.</small>
+    </div>
+  </div>
+
+  <button id="calculateBtn">Calculate Current Rate</button>
+  <button id="resetBtn">🔄 Reset Selection</button>
+</div>
+
+<div id="compareRatesSection" class="hidden">
+  <h2>Compare With Other Rates</h2>
+  
+  <div id="comparison-controls">
+    <label for="compare-schedule">Select Rate To Compare:</label>
+    <select id="compare-schedule"></select>
+    <button id="addComparisonBtn" class="add-rate-btn">Add To Comparison</button>
+  </div>
+  
+  <div id="comparison-table-container" class="hidden">
+    <h3>Rate Comparison Results</h3>
+    <table class="comparison-table" id="comparisonTable">
+      <thead>
+        <tr class="header-row">
+          <th></th>
+          <th id="option1-header">Option 1 - Current Rate</th>
+          <th id="option2-header" class="hidden">Option 2</th>
+          <th id="option3-header" class="hidden">Option 3</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="subheader-row">
+          <td>Rate Name</td>
+          <td id="option1-name"></td>
+          <td id="option2-name" class="hidden"></td>
+          <td id="option3-name" class="hidden"></td>
+        </tr>
+        <tr class="time-period-row">
+          <td>Present</td>
+          <td id="option1-cost" class="current-value"></td>
+          <td id="option2-cost" class="hidden"></td>
+          <td id="option3-cost" class="hidden"></td>
+        </tr>
+        <tr class="time-period-row">
+          <td>Future (Projected)</td>
+          <td id="option1-future"></td>
+          <td id="option2-future" class="hidden"></td>
+          <td id="option3-future" class="hidden"></td>
+        </tr>
+      </tbody>
+    </table>
+    
+    <div id="annual-savings" class="hidden">
+      <h3>Potential Annual Savings</h3>
+      <p id="savings-text"></p>
+    </div>
+  </div>
+</div>
+
+<div class="result hidden" id="resultBox"></div>
+
+<script>
+  // Utility variables
+  let currentCalculation = null;
+  let comparisonOptions = [];
+  let maxComparisons = 2; // Allow up to 2 additional rates (3 total including current)
+
+  // Fetch initial data
+  async function fetchStates() {
+    const res = await fetch('/states');
+    const states = await res.json();
+    const select = document.getElementById('state');
+    select.innerHTML = '<option value="">-- Select a State --</option>';
+    states.forEach(state => {
+      select.innerHTML += `<option value="${state}">${state}</option>`;
+    });
+  }
+
+  async function fetchUtilities(state) {
+    const res = await fetch(`/get_utilities_by_state?state=${state}`);
+    const data = await res.json();
+    const select = document.getElementById('utility');
+    select.innerHTML = '<option value="">-- Select a Utility --</option>';
+    data.forEach(util => {
+      select.innerHTML += `<option value="${util.UtilityID}">${util.UtilityName}</option>`;
+    });
+  }
+
+  async function fetchSchedules(utilityID, targetElement = 'base-schedule') {
+    const res = await fetch(`/schedules?utility_id=${utilityID}`);
+    const data = await res.json();
+    const select = document.getElementById(targetElement);
+    select.innerHTML = '<option value="">-- Select a Schedule --</option>';
+    
+    data.forEach(sch => {
+      let label = "";
+      if (sch.ScheduleName && sch.ScheduleName.trim() !== "") {
+        label = sch.ScheduleName;
+      } else if (sch.ScheduleDescription && sch.ScheduleDescription.trim() !== "") {
+        label = sch.ScheduleDescription;
+      }
+
+      if (label !== "") {
+        select.innerHTML += `<option value="${sch.ScheduleID}">${label}</option>`;
+      }
+    });
+  }
+
+  async function fetchScheduleDetails(scheduleID) {
+    const res = await fetch(`/schedule_details?schedule_id=${scheduleID}`);
+    const data = await res.json();
+    const tables = data.present_tables || [];
+
+    document.getElementById('kwh-section').classList.toggle('hidden', 
+      !tables.includes("EnergyTime_Table") && 
+      !tables.includes("Energy_Table") &&
+      !tables.includes("IncrementalEnergy_Table"));
+      
+    document.getElementById('kw-section').classList.toggle('hidden', 
+      !tables.includes("DemandTime_Table") && 
+      !tables.includes("Demand_Table") &&
+      !tables.includes("IncrementalDemand_Table") &&
+      !tables.includes("ReactiveDemand_Table"));
+      
+    document.getElementById('days-section').classList.toggle('hidden', 
+      !tables.includes("ServiceCharge_Table"));
+    
+    return data;
+  }
+
+  async function calculateBill(scheduleID, usage, demand, days, voltage) {
+    const payload = {
+      schedule_id: scheduleID,
+      kwh: usage || 0,
+      kw: demand || 0,
+      days: days || 30,
+      voltage: voltage || null
+    };
+
+    try {
+      const res = await fetch('/calculate_bill', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      return await res.json();
+    } catch (error) {
+      console.error("Error calculating bill:", error);
+      return { error: error.message };
+    }
+  }
+
+  // Event Listeners
+  document.getElementById('state').addEventListener('change', e => {
+    const state = e.target.value;
+    if (state) {
+      fetchUtilities(state);
+    }
+    document.getElementById('utility').innerHTML = '';
+    document.getElementById('base-schedule').innerHTML = '';
+    document.getElementById('compare-schedule').innerHTML = '';
+    document.getElementById('resultBox').innerHTML = '';
+    document.getElementById('resultBox').classList.add('hidden');
+    document.getElementById('input-fields').classList.add('hidden');
+    document.getElementById('compareRatesSection').classList.add('hidden');
+    document.getElementById('comparison-table-container').classList.add('hidden');
+    resetComparisonTable();
+  });
+
+  document.getElementById('utility').addEventListener('change', e => {
+    const utilityID = e.target.value;
+    if (utilityID) {
+      fetchSchedules(utilityID, 'base-schedule');
+      fetchSchedules(utilityID, 'compare-schedule');
+    }
+    document.getElementById('base-schedule').innerHTML = '';
+    document.getElementById('compare-schedule').innerHTML = '';
+    document.getElementById('resultBox').innerHTML = '';
+    document.getElementById('resultBox').classList.add('hidden');
+    document.getElementById('input-fields').classList.add('hidden');
+    document.getElementById('compareRatesSection').classList.add('hidden');
+    document.getElementById('comparison-table-container').classList.add('hidden');
+    resetComparisonTable();
+  });
+
+  document.getElementById('base-schedule').addEventListener('change', e => {
+    const scheduleID = e.target.value;
+    if (scheduleID) {
+      fetchScheduleDetails(scheduleID);
+      document.getElementById('input-fields').classList.remove('hidden');
+    } else {
+      document.getElementById('input-fields').classList.add('hidden');
+    }
+    document.getElementById('resultBox').innerHTML = '';
+    document.getElementById('resultBox').classList.add('hidden');
+    document.getElementById('compareRatesSection').classList.add('hidden');
+    document.getElementById('comparison-table-container').classList.add('hidden');
+    resetComparisonTable();
+  });
+
+  document.getElementById('calculateBtn').addEventListener('click', async () => {
+    const state = document.getElementById('state').value;
+    const utility = document.getElementById('utility').value;
+    const schedule = document.getElementById('base-schedule').value;
+    const kwh = document.getElementById('kwh').value;
+    const kw = document.getElementById('kw').value;
+    const days = document.getElementById('days').value || 30;
+    const voltage = document.getElementById('voltage').value;
+
+    const resultBox = document.getElementById('resultBox');
+    resultBox.classList.remove('hidden');
+
+    if (!state || !utility || !schedule) {
+      resultBox.innerHTML = `<em>Please complete all selections before calculating.</em>`;
+      return;
+    }
+
+    try {
+      const result = await calculateBill(schedule, kwh, kw, days, voltage);
+      
+      if (result.error) {
+        resultBox.innerHTML = `<em>Error calculating bill: ${result.error}</em>`;
+        return;
+      }
+
+      // Store current calculation for comparison
+      currentCalculation = {
+        schedule_id: schedule,
+        schedule_name: document.getElementById('base-schedule').options[document.getElementById('base-schedule').selectedIndex].text,
+        kwh: kwh,
+        kw: kw,
+        days: days,
+        voltage: voltage,
+        result: result
+      };
+
+      // Update comparison table with current rate
+      document.getElementById('option1-name').textContent = currentCalculation.schedule_name;
+      document.getElementById('option1-cost').textContent = `$${parseFloat(result.total_cost).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+      
+      // Simple future projection (assumed 1.8% rate increase)
+      const projectedCost = result.total_cost * 1.018;
+      document.getElementById('option1-future').textContent = `$${parseFloat(projectedCost).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+      // Format detailed breakdown
+      let breakdownHtml = "";
+      for (const [category, amount] of Object.entries(result.breakdown)) {
+        breakdownHtml += `
+          <div class="breakdown-section">
+            <strong>${category}:</strong> $${parseFloat(amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+          </div>`;
+      }
+
+      resultBox.innerHTML = `
+        <h3>Current Rate Calculation Results</h3>
+        <p>
+          <strong>State:</strong> ${state}<br>
+          <strong>Utility:</strong> ${document.getElementById('utility').options[document.getElementById('utility').selectedIndex].text}<br>
+          <strong>Schedule:</strong> ${currentCalculation.schedule_name}<br>
+        </p>
+        
+        <p>
+          <strong>Usage Parameters:</strong><br>
+          ${kwh ? `<strong>Monthly Usage:</strong> ${kwh} kWh<br>` : ''}
+          ${kw ? `<strong>Monthly Demand:</strong> ${kw} kW<br>` : ''}
+          <strong>Billing Days:</strong> ${days} days<br>
+          ${voltage ? `<strong>Voltage Level:</strong> ${voltage} kV<br>` : ''}
+        </p>
+        
+        <h4>Charge Breakdown:</h4>
+        ${breakdownHtml}
+        
+        <div class="total-amount">
+          Total Estimated Bill: $${parseFloat(result.total_cost).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+        </div>
+      `;
+
+      // Now show the rate comparison section
+      document.getElementById('compareRatesSection').classList.remove('hidden');
+      
+    } catch (error) {
+      resultBox.innerHTML = `<em>Error: ${error.message}</em>`;
+    }
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    document.getElementById('state').selectedIndex = 0;
+    document.getElementById('utility').innerHTML = '';
+    document.getElementById('base-schedule').innerHTML = '';
+    document.getElementById('compare-schedule').innerHTML = '';
+    document.getElementById('kwh').value = '';
+    document.getElementById('kw').value = '';
+    document.getElementById('days').value = '30';
+    document.getElementById('voltage').value = '';
+    document.getElementById('input-fields').classList.add('hidden');
+    document.getElementById('resultBox').innerHTML = '';
+    document.getElementById('resultBox').classList.add('hidden');
+    document.getElementById('compareRatesSection').classList.add('hidden');
+    document.getElementById('comparison-table-container').classList.add('hidden');
+    resetComparisonTable();
+    fetchStates();
+  });
+
+  document.getElementById('addComparisonBtn').addEventListener('click', async () => {
+    if (!currentCalculation) {
+      alert("Please calculate your current rate first.");
+      return;
+    }
+
+    const compareScheduleId = document.getElementById('compare-schedule').value;
+    const compareScheduleName = document.getElementById('compare-schedule').options[document.getElementById('compare-schedule').selectedIndex].text;
+    
+    if (!compareScheduleId) {
+      alert("Please select a rate to compare.");
+      return;
+    }
+
+    // Don't compare to the same rate
+    if (compareScheduleId === currentCalculation.schedule_id) {
+      alert("This is already your current rate. Please select a different rate to compare.");
+      return;
+    }
+
+    // Check if this rate is already in the comparison
+    if (comparisonOptions.some(option => option.schedule_id === compareScheduleId)) {
+      alert("This rate is already in your comparison.");
+      return;
+    }
+
+    // Check if we've reached the maximum number of comparisons
+    if (comparisonOptions.length >= maxComparisons) {
+      alert(`You can only compare up to ${maxComparisons} additional rates.`);
+      return;
+    }
+
+    try {
+      // Calculate bill for this rate using the same inputs
+      const result = await calculateBill(
+        compareScheduleId, 
+        currentCalculation.kwh,
+        currentCalculation.kw,
+        currentCalculation.days,
+        currentCalculation.voltage
+      );
+      
+      if (result.error) {
+        alert(`Error calculating bill for ${compareScheduleName}: ${result.error}`);
+        return;
+      }
+
+      // Add to comparison options
+      const comparisonOption = {
+        schedule_id: compareScheduleId,
+        schedule_name: compareScheduleName,
+        result: result,
+        projected: result.total_cost * 1.018  // Apply same projection factor
+      };
+      
+      comparisonOptions.push(comparisonOption);
+      
+      // Update comparison table
+      updateComparisonTable();
+      
+    } catch (error) {
+      alert(`Error: ${error.message}`);
+    }
+  });
+
+  function updateComparisonTable() {
+    const table = document.getElementById('comparisonTable');
+    document.getElementById('comparison-table-container').classList.remove('hidden');
+    
+    // Update comparison options
+    for (let i = 0; i < comparisonOptions.length; i++) {
+      const optionIndex = i + 2;  // Options start at 2 (1 is current)
+      const option = comparisonOptions[i];
+      
+      // Show the column
+      document.getElementById(`option${optionIndex}-header`).classList.remove('hidden');
+      document.getElementById(`option${optionIndex}-name`).classList.remove('hidden');
+      document.getElementById(`option${optionIndex}-cost`).classList.remove('hidden');
+      document.getElementById(`option${optionIndex}-future`).classList.remove('hidden');
+      
+      // Update header and name
+      document.getElementById(`option${optionIndex}-header`).textContent = `Option ${optionIndex}${getOptionType(option, currentCalculation)}`;
+      document.getElementById(`option${optionIndex}-name`).textContent = option.schedule_name;
+      
+      // Update costs
+      document.getElementById(`option${optionIndex}-cost`).textContent = 
+        `$${parseFloat(option.result.total_cost).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+      
+      document.getElementById(`option${optionIndex}-future`).textContent = 
+        `$${parseFloat(option.projected).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+      
+      // Apply styling based on cost comparison
+      applyComparisonStyling(optionIndex, option.result.total_cost);
+    }
+    
+    calculateAndDisplaySavings();
+  }
+
+  function getOptionType(option, currentOption) {
+    // Determine if this is the "risk" option (cheapest) or "best" option
+    if (option.result.total_cost < currentOption.result.total_cost) {
+      // If it's more than 5% cheaper, it might be higher risk
+      if (option.result.total_cost < currentOption.result.total_cost * 0.95) {
+        return " - Risk Rate";
+      } else {
+        return " - Best Rate";
+      }
+    } else {
+      return "";
+    }
+  }
+
+  function applyComparisonStyling(optionIndex, cost) {
+    const currentCost = currentCalculation.result.total_cost;
+    const cell = document.getElementById(`option${optionIndex}-cost`);
+    
+    // Remove any existing classes
+    cell.classList.remove("current-value", "best-value", "risk-value");
+    
+    // Add appropriate class
+    if (cost < currentCost * 0.95) {
+      // More than 5% cheaper - might be higher risk
+      cell.classList.add("risk-value");
+    } else if (cost < currentCost) {
+      // Cheaper but not dramatically so - likely best value
+      cell.classList.add("best-value");
+    } else {
+      // More expensive
+      // No special styling
+    }
+  }
+
+  function calculateAndDisplaySavings() {
+    if (comparisonOptions.length === 0) return;
+    
+    // Find the best option (lowest cost)
+    const bestOption = comparisonOptions.reduce((best, current) => 
+      current.result.total_cost < best.result.total_cost ? current : best, 
+      { result: { total_cost: Infinity } }
+    );
+    
+    // Calculate annual savings
+    const monthlySavings = currentCalculation.result.total_cost - bestOption.result.total_cost;
+    const annualSavings = monthlySavings * 12;
+    
+    if (monthlySavings > 0) {
+      document.getElementById('annual-savings').classList.remove('hidden');
+      document.getElementById('savings-text').innerHTML = `
+        By switching to ${bestOption.schedule_name}, you could save approximately:
+        <br><strong>$${parseFloat(monthlySavings).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong> per month
+        <br><strong>$${parseFloat(annualSavings).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong> per year
+      `;
+    } else {
+      document.getElementById('annual-savings').classList.remove('hidden');
+      document.getElementById('savings-text').innerHTML = `
+        Your current rate (${currentCalculation.schedule_name}) appears to be the most cost-effective option based on your usage pattern.
+      `;
+    }
+  }
+
+  function resetComparisonTable() {
+    // Reset stored data
+    currentCalculation = null;
+    comparisonOptions = [];
+    
+    // Reset visible columns
+    for (let i = 2; i <= maxComparisons + 1; i++) {
+      document.getElementById(`option${i}-header`).classList.add('hidden');
+      document.getElementById(`option${i}-name`).classList.add('hidden');
+      document.getElementById(`option${i}-cost`).classList.add('hidden');
+      document.getElementById(`option${i}-future`).classList.add('hidden');
+    }
+    
+    // Reset content
+    document.getElementById('option1-name').textContent = "";
+    document.getElementById('option1-cost').textContent = "";
+    document.getElementById('option1-future').textContent = "";
+    
+    // Hide additional sections
+    document.getElementById('annual-savings').classList.add('hidden');
+  }
+
+  // Initialize on page load
+  fetchStates();
+</script>
+
+</body>
+</html>
