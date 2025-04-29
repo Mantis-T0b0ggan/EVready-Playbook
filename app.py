@@ -299,10 +299,15 @@ def calculate_bill():
     try:
         data = request.json
         schedule_id = int(data.get("schedule_id"))
-        usage_kwh = float(data.get("kwh", 0))
-        demand_kw = float(data.get("kw", 0))
-        billing_days = int(data.get("days", 30))  # Default to 30 if not provided
-        voltage = float(data.get("voltage", 0))  # Optional voltage level
+        
+        # Convert input values with proper handling of None values
+        usage_kwh = float(data.get("kwh", 0) or 0)  # Convert None to 0
+        demand_kw = float(data.get("kw", 0) or 0)   # Convert None to 0
+        billing_days = int(data.get("days", 30) or 30)  # Convert None to 30
+        
+        # Handle voltage value - if it's None or empty string, set to None
+        voltage_input = data.get("voltage")
+        voltage = float(voltage_input) if voltage_input and voltage_input != "" else None
         
         # Initialize charge components
         charges = {}
@@ -431,7 +436,7 @@ def calculate_bill():
         reactive_demand_charges = supabase.table("ReactiveDemand_Table").select("*").eq("ScheduleID", schedule_id).execute().data
         reactive_demand_total = 0
         
-        if reactive_demand_charges:
+        if reactive_demand_charges and demand_kw > 0:  # Only calculate if there's actual demand
             # Typical power factor assumption (0.9)
             power_factor = 0.9
             kvar_demand = demand_kw * math.tan(math.acos(power_factor))
