@@ -28,32 +28,23 @@ def home():
 def browse_schedules():
     return render_template("browse_schedules.html")
 
-# GET States that have Utilities with at least one Schedule in EVready Database
+# GET All States for dropdown (all 50 states)
 @app.route("/states")
 def get_states():
     try:
-        # First, get all schedules to find which utility IDs have schedules
-        schedules = supabase.table("Schedule_Table").select("UtilityID").execute().data
+        # Define all 50 US states plus DC, Puerto Rico, etc.
+        all_states = [
+            "AK", "AL", "AR", "AZ", "CA", "CO", "CT", "DC", "DE", "FL", 
+            "GA", "HI", "IA", "ID", "IL", "IN", "KS", "KY", "LA", "MA", 
+            "MD", "ME", "MI", "MN", "MO", "MS", "MT", "NC", "ND", "NE", 
+            "NH", "NJ", "NM", "NV", "NY", "OH", "OK", "OR", "PA", "PR", 
+            "RI", "SC", "SD", "TN", "TX", "UT", "VA", "VT", "WA", "WI", 
+            "WV", "WY"
+        ]
         
-        # Create a set of utility IDs that have at least one schedule
-        utility_ids_with_schedules = {s['UtilityID'] for s in schedules if s.get('UtilityID') is not None}
-        
-        print(f"Utility IDs with schedules: {utility_ids_with_schedules}")  # Debug log
-        
-        # Get all utilities that have schedules
-        states_with_schedules = set()
-        for util_id in utility_ids_with_schedules:
-            utility = supabase.table("Utility").select("State").eq("UtilityID", util_id).execute().data
-            if utility and len(utility) > 0:
-                state_abbr = utility[0].get('State')
-                if state_abbr:
-                    states_with_schedules.add(state_abbr)
-        
-        print(f"States with schedules (abbreviations): {states_with_schedules}")  # Debug log
-        
-        return jsonify(sorted(list(states_with_schedules)))
+        return jsonify(sorted(all_states))
     except Exception as e:
-        print(f"Error in get_states: {str(e)}")  # Debug log
+        print(f"Error in get_states: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 # GET Utilities filtered by selected State
@@ -64,23 +55,42 @@ def get_utilities_by_state():
         # Get all utilities in the selected state
         utilities = supabase.table("Utility").select("UtilityID, UtilityName, State").eq("State", state).execute().data
         
-        # Get all schedules
-        schedules = supabase.table("Schedule_Table").select("UtilityID").execute().data
+        # Check if we found any utilities for this state
+        if not utilities:
+            return jsonify({"no_utilities": True, "message": f"No utilities found for {state}"})
         
-        # Create a set of utility IDs that have at least one schedule
-        utility_ids_with_schedules = {s['UtilityID'] for s in schedules if s.get('UtilityID') is not None}
+        # Get all utilities that have at least one schedule
+        utilities_with_schedules = []
         
-        # Filter utilities to only include those with schedules
-        filtered_utilities = [
-            {"UtilityID": u["UtilityID"], "UtilityName": u["UtilityName"]}
-            for u in utilities if u["UtilityID"] in utility_ids_with_schedules
-        ]
+        for utility in utilities:
+            # Check if this utility has any schedules
+            utility_id = utility["UtilityID"]
+            schedules = supabase.table("Schedule_Table").select("ScheduleID").eq("UtilityID", utility_id).execute().data
+            
+            if schedules and len(schedules) > 0:
+                utilities_with_schedules.append({
+                    "UtilityID": utility["UtilityID"],
+                    "UtilityName": utility["UtilityName"],
+                    "has_schedules": True
+                })
+            else:
+                utilities_with_schedules.append({
+                    "UtilityID": utility["UtilityID"],
+                    "UtilityName": utility["UtilityName"],
+                    "has_schedules": False
+                })
         
-        print(f"Filtered utilities for state {state}: {filtered_utilities}")  # Debug log
+        # If no utilities have schedules, return a message
+        if all(not u.get("has_schedules", False) for u in utilities_with_schedules):
+            return jsonify({
+                "no_schedules": True, 
+                "utilities": utilities_with_schedules,
+                "message": f"No schedule data available for utilities in {state}"
+            })
         
-        return jsonify(filtered_utilities)
+        return jsonify(utilities_with_schedules)
     except Exception as e:
-        print(f"Error in get_utilities_by_state: {str(e)}")  # Debug log
+        print(f"Error in get_utilities_by_state: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 # GET Schedules for a selected Utility
@@ -654,7 +664,7 @@ def diagnostic():
     except Exception as e:
         print(f"Error in diagnostic: {str(e)}")
         return jsonify({"error": str(e)}), 500
-        
+
 # ----------------------
 # RUN APP
 # ----------------------
