@@ -1,5 +1,6 @@
-steamlit
-supabase
-python-dotenv
-pandas
-altair
+streamlit==1.31.0
+supabase==2.0.3
+python-dotenv==1.0.0
+pandas==2.1.3
+numpy==1.26.2
+matplotlib==3.8.2
