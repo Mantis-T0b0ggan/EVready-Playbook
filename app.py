@@ -32,12 +32,12 @@ def browse_schedules():
 @app.route("/states")
 def get_states():
     try:
-        # Define all 50 US states plus DC, Puerto Rico, etc.
+        # Define all 50 US states
         all_states = [
-            "AK", "AL", "AR", "AZ", "CA", "CO", "CT", "DC", "DE", "FL", 
+            "AK", "AL", "AR", "AZ", "CA", "CO", "CT", "DE", "FL", 
             "GA", "HI", "IA", "ID", "IL", "IN", "KS", "KY", "LA", "MA", 
             "MD", "ME", "MI", "MN", "MO", "MS", "MT", "NC", "ND", "NE", 
-            "NH", "NJ", "NM", "NV", "NY", "OH", "OK", "OR", "PA", "PR", 
+            "NH", "NJ", "NM", "NV", "NY", "OH", "OK", "OR", "PA", 
             "RI", "SC", "SD", "TN", "TX", "UT", "VA", "VT", "WA", "WI", 
             "WV", "WY"
         ]
