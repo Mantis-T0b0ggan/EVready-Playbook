@@ -71,6 +71,24 @@
         tr:nth-child(even) {
             background-color: #fafafa;
         }
+        .hidden {
+            display: none;
+        }
+        #message-area {
+            padding: 10px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        .error-message {
+            background-color: #ffebee;
+            color: #c62828;
+            border: 1px solid #ef9a9a;
+        }
+        .info-message {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #a5d6a7;
+        }
     </style>
 </head>
 
@@ -91,6 +109,9 @@
 <label for="utility">Select a Utility:</label>
 <select id="utility"></select>
 
+<!-- Message Display Area (initially hidden) -->
+<div id="message-area" class="hidden"></div>
+
 <!-- Reset Button -->
 <button id="resetBtn">
     🔄 Reset Selection
@@ -103,54 +124,149 @@
 </table>
 
 <script>
+    // Debug helper function
+    function logData(label, data) {
+        console.log(`${label}:`, data);
+    }
+
+    // Display error or info messages
+    function showMessage(message, isError = false) {
+        // Check if message element exists, create it if not
+        let messageElement = document.getElementById('message-area');
+        if (!messageElement) {
+            messageElement = document.createElement('div');
+            messageElement.id = 'message-area';
+            messageElement.style.padding = '10px';
+            messageElement.style.margin = '15px 0';
+            messageElement.style.borderRadius = '5px';
+            
+            // Insert after the utility dropdown
+            const utilitySelect = document.getElementById('utility');
+            utilitySelect.parentNode.insertBefore(messageElement, utilitySelect.nextSibling);
+        }
+        
+        // Set message style based on type
+        if (isError) {
+            messageElement.style.backgroundColor = '#ffebee';
+            messageElement.style.color = '#c62828';
+            messageElement.style.border = '1px solid #ef9a9a';
+        } else {
+            messageElement.style.backgroundColor = '#e8f5e9';
+            messageElement.style.color = '#2e7d32';
+            messageElement.style.border = '1px solid #a5d6a7';
+        }
+        
+        messageElement.textContent = message;
+        messageElement.classList.remove('hidden');
+    }
+    
+    // Clear any displayed messages
+    function clearMessage() {
+        const messageElement = document.getElementById('message-area');
+        if (messageElement) {
+            messageElement.classList.add('hidden');
+            messageElement.textContent = '';
+        }
+    }
+
     async function fetchStates() {
         try {
+            logData("Fetching states", "Starting fetch");
             const res = await fetch('/states');
             if (!res.ok) {
                 throw new Error(`HTTP error! Status: ${res.status}`);
             }
             const states = await res.json();
+            logData("States received", states);
+            
             const select = document.getElementById('state');
             select.innerHTML = '<option value="">-- Select a State --</option>';
-            states.forEach(state => {
-                select.innerHTML += `<option value="${state}">${state}</option>`;
-            });
+            
+            if (states && states.length > 0) {
+                states.forEach(state => {
+                    select.innerHTML += `<option value="${state}">${state}</option>`;
+                });
+                logData("States dropdown populated", select.innerHTML);
+            } else {
+                logData("No states returned from API", "Empty or null response");
+            }
         } catch (error) {
             console.error("Error fetching states:", error);
+            showMessage("Error loading states: " + error.message, true);
         }
     }
 
     async function fetchUtilities(state) {
         try {
-            const res = await fetch(`/get_utilities_by_state?state=${state}`);
+            clearMessage();
+            logData("Fetching utilities for state", state);
+            const res = await fetch(`/get_utilities_by_state?state=${encodeURIComponent(state)}`);
             if (!res.ok) {
                 throw new Error(`HTTP error! Status: ${res.status}`);
             }
-            const utilities = await res.json();
+            const response = await res.json();
+            logData("Utilities response", response);
+            
             const select = document.getElementById('utility');
             select.innerHTML = '<option value="">-- Select a Utility --</option>';
-            utilities.forEach(util => {
-                select.innerHTML += `<option value="${util.UtilityID}">${util.UtilityName}</option>`;
-            });
+            
+            // Check for no utilities message
+            if (response.no_utilities) {
+                showMessage(response.message, true);
+                return;
+            }
+            
+            // Check for no schedules message
+            if (response.no_schedules) {
+                showMessage(response.message, true);
+                // Still populate the dropdown, but mark utilities without schedules
+                response.utilities.forEach(util => {
+                    select.innerHTML += `<option value="${util.UtilityID}" disabled>${util.UtilityName} (No schedules available)</option>`;
+                });
+                return;
+            }
+            
+            // Normal case - utilities with schedules
+            if (Array.isArray(response)) {
+                response.forEach(util => {
+                    if (util.has_schedules) {
+                        select.innerHTML += `<option value="${util.UtilityID}">${util.UtilityName}</option>`;
+                    } else {
+                        select.innerHTML += `<option value="${util.UtilityID}" disabled>${util.UtilityName} (No schedules available)</option>`;
+                    }
+                });
+                
+                if (response.length === 0) {
+                    showMessage(`No utilities found for ${state}`, true);
+                }
+            } else {
+                logData("Unexpected response format", response);
+                showMessage("Received unexpected data format from server", true);
+            }
         } catch (error) {
             console.error("Error fetching utilities:", error);
+            showMessage("Error loading utilities: " + error.message, true);
         }
     }
 
     async function fetchSchedules(utilityId) {
         try {
+            clearMessage();
+            logData("Fetching schedules for utility", utilityId);
             const res = await fetch(`/get_schedules_by_utility?utility_id=${utilityId}`);
             if (!res.ok) {
                 throw new Error(`HTTP error! Status: ${res.status}`);
             }
             const schedules = await res.json();
+            logData("Schedules received", schedules);
+            
             const table = document.getElementById('scheduleTable');
             const thead = table.querySelector('thead');
             const tbody = table.querySelector('tbody');
             tbody.innerHTML = '';
             thead.innerHTML = '';
 
-            if (schedules.length > 0) {
+            if (schedules && schedules.length > 0) {
                 table.classList.remove('hidden');
 
                 // Get all unique keys
@@ -193,11 +309,16 @@
                     row += '</tr>';
                     tbody.innerHTML += row;
                 });
+                
+                logData("Schedule table populated", "Table updated with schedule data");
             } else {
                 table.classList.add('hidden');
+                showMessage("No schedules found for this utility", true);
+                logData("No schedules returned for this utility", "Empty or null response");
             }
         } catch (error) {
             console.error("Error fetching schedules:", error);
+            showMessage("Error loading schedules: " + error.message, true);
         }
     }
 
@@ -206,29 +327,36 @@
         const selectedState = e.target.value;
         if (selectedState) {
             fetchUtilities(selectedState);
+        } else {
+            document.getElementById('utility').innerHTML = '<option value="">-- Select a Utility --</option>';
+            document.getElementById('scheduleTable').classList.add('hidden');
+            clearMessage();
         }
-        document.getElementById('utility').innerHTML = '';
-        document.getElementById('scheduleTable').classList.add('hidden');
     });
 
     document.getElementById('utility').addEventListener('change', e => {
         const selectedUtility = e.target.value;
         if (selectedUtility) {
             fetchSchedules(selectedUtility);
+        } else {
+            document.getElementById('scheduleTable').classList.add('hidden');
+            clearMessage();
         }
     });
 
     document.getElementById('resetBtn').addEventListener('click', () => {
         document.getElementById('state').selectedIndex = 0;
-        document.getElementById('utility').innerHTML = '';
+        document.getElementById('utility').innerHTML = '<option value="">-- Select a Utility --</option>';
         document.getElementById('scheduleTable').classList.add('hidden');
         document.querySelector('thead').innerHTML = '';
         document.querySelector('tbody').innerHTML = '';
+        clearMessage();
         fetchStates(); // Reload states
     });
 
     // Initial load
     document.addEventListener('DOMContentLoaded', () => {
+        console.log("DOM loaded, initializing app...");
         fetchStates();
     });
 </script>
