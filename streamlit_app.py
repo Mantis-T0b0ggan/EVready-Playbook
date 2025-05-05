@@ -644,20 +644,32 @@ def bill_estimator_page():
         )
         
         # Step 3: Select Rate Schedule
-        if selected_utility_id:
-            st.subheader("Step 3: Select Your Rate Schedule")
-            schedules = get_schedules_by_utility(selected_utility_id)
-            
-            if not schedules:
-                st.warning(f"No rate schedules available for the selected utility.")
-                return
-                
-            schedule_options = [(s["ScheduleID"], s["ScheduleName"]) for s in schedules]
-            selected_schedule_id = st.selectbox(
-                "Rate Schedule", 
-                [opt[0] for opt in schedule_options],
-                format_func=lambda x: next((opt[1] for opt in schedule_options if opt[0] == x), "")
-            )
+    if selected_utility_id:
+        st.subheader("Step 3: Select Your Rate Schedule")
+        schedules = get_schedules_by_utility(selected_utility_id)
+    
+        if not schedules:
+            st.warning(f"No rate schedules available for the selected utility.")
+            return
+    
+        # Debug output to see what data we're getting
+        # st.write("Debug - Schedules data:", schedules)
+    
+        # Create display options with combined name and description
+        schedule_display = {}
+        for s in schedules:
+            schedule_id = s["ScheduleID"]
+            name = s["ScheduleName"]
+            description = s.get("ScheduleDescription", "")
+            display_text = f"{name} - {description}" if description else name
+            schedule_display[schedule_id] = display_text
+    
+        # Use the display dictionary for the dropdown
+        selected_schedule_id = st.selectbox(
+            "Rate Schedule", 
+            options=list(schedule_display.keys()),
+            format_func=lambda x: schedule_display[x]
+        )
             
             # Step 4: Enter Usage Information
             if selected_schedule_id:
