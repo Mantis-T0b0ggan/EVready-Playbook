@@ -1,163 +1,29 @@
+import streamlit as st
 import os
-from flask import Flask, render_template, request, jsonify
 from supabase import create_client, Client
 from dotenv import load_dotenv
-from datetime import datetime, timedelta
 import math
+from datetime import datetime, timedelta
+
+# Page configuration
+st.set_page_config(
+    page_title="Utility Bill Estimator",
+    page_icon="⚡",
+    layout="wide"
+)
 
 # Load environment variables
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-app = Flask(__name__, template_folder="templates")
+# Initialize Supabase client
+@st.cache_resource
+def init_supabase():
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# ----------------------
-# ROUTES
-# ----------------------
-
-# Home Page (Bill Estimator)
-@app.route("/")
-def home():
-    return render_template("index.html")
-
-# Browse Schedules Page
-@app.route("/browse_schedules")
-def browse_schedules():
-    return render_template("browse_schedules.html")
-
-# GET All States for dropdown (all 50 states)
-@app.route("/states")
-def get_states():
-    try:
-        # Define all 50 US states
-        all_states = [
-            "AK", "AL", "AR", "AZ", "CA", "CO", "CT", "DE", "FL", 
-            "GA", "HI", "IA", "ID", "IL", "IN", "KS", "KY", "LA", "MA", 
-            "MD", "ME", "MI", "MN", "MO", "MS", "MT", "NC", "ND", "NE", 
-            "NH", "NJ", "NM", "NV", "NY", "OH", "OK", "OR", "PA", 
-            "RI", "SC", "SD", "TN", "TX", "UT", "VA", "VT", "WA", "WI", 
-            "WV", "WY"
-        ]
-        
-        return jsonify(sorted(all_states))
-    except Exception as e:
-        print(f"Error in get_states: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-# GET Utilities filtered by selected State
-@app.route("/get_utilities_by_state")
-def get_utilities_by_state():
-    state = request.args.get("state")
-    try:
-        # Get all utilities in the selected state
-        utilities = supabase.table("Utility").select("UtilityID, UtilityName, State").eq("State", state).execute().data
-        
-        # Check if we found any utilities for this state
-        if not utilities:
-            return jsonify({"no_utilities": True, "message": f"No utilities found for {state}"})
-        
-        # Get all utilities that have at least one schedule
-        utilities_with_schedules = []
-        
-        for utility in utilities:
-            # Check if this utility has any schedules
-            utility_id = utility["UtilityID"]
-            schedules = supabase.table("Schedule_Table").select("ScheduleID").eq("UtilityID", utility_id).execute().data
-            
-            if schedules and len(schedules) > 0:
-                utilities_with_schedules.append({
-                    "UtilityID": utility["UtilityID"],
-                    "UtilityName": utility["UtilityName"],
-                    "has_schedules": True
-                })
-            else:
-                utilities_with_schedules.append({
-                    "UtilityID": utility["UtilityID"],
-                    "UtilityName": utility["UtilityName"],
-                    "has_schedules": False
-                })
-        
-        # If no utilities have schedules, return a message
-        if all(not u.get("has_schedules", False) for u in utilities_with_schedules):
-            return jsonify({
-                "no_schedules": True, 
-                "utilities": utilities_with_schedules,
-                "message": f"No schedule data available for utilities in {state}"
-            })
-        
-        return jsonify(utilities_with_schedules)
-    except Exception as e:
-        print(f"Error in get_utilities_by_state: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-# GET Schedules for a selected Utility
-@app.route("/schedules")
-def get_schedules():
-    utility_id = request.args.get("utility_id")
-    try:
-        result = supabase.table("Schedule_Table") \
-            .select("ScheduleID, ScheduleName, ScheduleDescription") \
-            .eq("UtilityID", utility_id) \
-            .execute()
-        return jsonify(result.data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# GET All Schedule Data for a selected Utility (for browsing)
-@app.route("/get_schedules_by_utility")
-def get_schedules_by_utility():
-    utility_id = request.args.get("utility_id")
-    try:
-        result = supabase.table("Schedule_Table") \
-            .select("*") \
-            .eq("UtilityID", utility_id) \
-            .execute()
-        return jsonify(result.data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# GET Schedule Details (used for showing dynamic input fields)
-@app.route("/schedule_details")
-def get_schedule_details():
-    schedule_id = request.args.get("schedule_id")
-    try:
-        schedule = supabase.table("Schedule_Table").select("*").eq("ScheduleID", schedule_id).single().execute().data
-
-        detail_tables = [
-            "DemandTime_Table",
-            "Demand_Table",
-            "EnergyTime_Table",
-            "Energy_Table",
-            "IncrementalDemand_Table",
-            "IncrementalEnergy_Table",
-            "ReactiveDemand_Table",
-            "ServiceCharge_Table",
-            "OtherCharges_Table",
-            "TaxInfo_Table",
-            "Percentages_Table",
-            "Notes_Table"
-        ]
-
-        details = {}
-        present_tables = []
-
-        for table in detail_tables:
-            res = supabase.table(table).select("*").eq("ScheduleID", schedule_id).execute()
-            if res.data:
-                details[table] = res.data
-                present_tables.append(table)
-
-        return jsonify({
-            "schedule": schedule,
-            "present_tables": present_tables,
-            "details": details
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+supabase = init_supabase()
 
 # Helper Functions for Bill Calculation
 def is_applicable(record, voltage=None):
@@ -319,22 +185,9 @@ def calculate_incremental_charges(usage, incremental_entries, rate_field="RatekW
     
     return total_charge
 
-# POST Calculate Estimated Bill
-@app.route("/calculate_bill", methods=["POST"])
-def calculate_bill():
+def calculate_bill(schedule_id, usage_kwh, demand_kw, billing_days, voltage):
+    """Calculate the bill based on user inputs"""
     try:
-        data = request.json
-        schedule_id = int(data.get("schedule_id"))
-        
-        # Convert input values with proper handling of None values
-        usage_kwh = float(data.get("kwh", 0) or 0)  # Convert None to 0
-        demand_kw = float(data.get("kw", 0) or 0)   # Convert None to 0
-        billing_days = int(data.get("days", 30) or 30)  # Convert None to 30
-        
-        # Handle voltage value - if it's None or empty string, set to None
-        voltage_input = data.get("voltage")
-        voltage = float(voltage_input) if voltage_input and voltage_input != "" else None
-        
         # Initialize charge components
         charges = {}
         detailed_breakdown = {}
@@ -581,87 +434,457 @@ def calculate_bill():
         # 7. TOTAL BILL CALCULATION
         total_cost = subtotal + percentage_total + tax_total
         
-        return jsonify({
+        return {
             "breakdown": detailed_breakdown,
             "total_cost": total_cost
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/compare_rates")
-def compare_rates():
-    return render_template("compare_rates.html")
-
-# Diagnostic endpoint to help troubleshoot state/utility/schedule relationships
-@app.route("/diagnostic")
-def diagnostic():
-    try:
-        # Get all schedules
-        schedules = supabase.table("Schedule_Table").select("ScheduleID, UtilityID, ScheduleName").execute().data
-        print(f"Found {len(schedules)} schedules in database")
-        
-        # Get all utilities
-        utilities = supabase.table("Utility").select("UtilityID, UtilityName, State").execute().data
-        print(f"Found {len(utilities)} utilities in database")
-        
-        # Create a dictionary to map UtilityID to utility details
-        utility_map = {u["UtilityID"]: u for u in utilities}
-        
-        # Create a comprehensive report of what's in the database
-        utility_schedules = {}
-        state_utilities = {}
-        
-        for schedule in schedules:
-            util_id = schedule.get("UtilityID")
-            if util_id is None:
-                continue
-                
-            if util_id not in utility_schedules:
-                utility_schedules[util_id] = []
-                
-            utility_schedules[util_id].append({
-                "ScheduleID": schedule.get("ScheduleID"),
-                "ScheduleName": schedule.get("ScheduleName")
-            })
-            
-            # Get the utility details
-            utility = utility_map.get(util_id)
-            if utility:
-                state_abbr = utility.get("State")
-                if state_abbr:
-                    if state_abbr not in state_utilities:
-                        state_utilities[state_abbr] = []
-                        
-                    if util_id not in [u["UtilityID"] for u in state_utilities[state_abbr]]:
-                        state_utilities[state_abbr].append({
-                            "UtilityID": util_id,
-                            "UtilityName": utility.get("UtilityName")
-                        })
-        
-        # Check specifically for Tennessee (TN)
-        tn_utilities = [u for u in utilities if u.get("State") == "TN"]
-        tn_utility_ids = [u["UtilityID"] for u in tn_utilities]
-        tn_utility_with_schedules = [
-            util_id for util_id in tn_utility_ids 
-            if util_id in utility_schedules
-        ]
-        
-        # Prepare the results
-        results = {
-            "states_with_utilities": list(state_utilities.keys()),
-            "utility_count_by_state": {state: len(utils) for state, utils in state_utilities.items()},
-            "schedule_count_by_utility": {util_id: len(scheds) for util_id, scheds in utility_schedules.items()},
-            "state_utility_details": state_utilities,
-            "utility_schedule_details": utility_schedules,
         }
-        
-        return jsonify(results)
     except Exception as e:
-        print(f"Error in diagnostic: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        st.error(f"Error in calculation: {str(e)}")
+        return None
 
-# ----------------------
-# RUN APP
-# ----------------------
+# Data Fetching Functions
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def get_all_states():
+    """Get all 50 US states for dropdown"""
+    try:
+        all_states = [
+            "AK", "AL", "AR", "AZ", "CA", "CO", "CT", "DE", "FL", 
+            "GA", "HI", "IA", "ID", "IL", "IN", "KS", "KY", "LA", "MA", 
+            "MD", "ME", "MI", "MN", "MO", "MS", "MT", "NC", "ND", "NE", 
+            "NH", "NJ", "NM", "NV", "NY", "OH", "OK", "OR", "PA", 
+            "RI", "SC", "SD", "TN", "TX", "UT", "VA", "VT", "WA", "WI", 
+            "WV", "WY"
+        ]
+        return sorted(all_states)
+    except Exception as e:
+        st.error(f"Error fetching states: {str(e)}")
+        return []
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def get_utilities_by_state(state):
+    """Get utilities filtered by selected state"""
+    try:
+        # Get all utilities in the selected state
+        utilities = supabase.table("Utility").select("UtilityID, UtilityName, State").eq("State", state).execute().data
+        
+        # Check if we found any utilities for this state
+        if not utilities:
+            return {"no_utilities": True, "message": f"No utilities found for {state}"}
+        
+        # Get all utilities that have at least one schedule
+        utilities_with_schedules = []
+        
+        for utility in utilities:
+            # Check if this utility has any schedules
+            utility_id = utility["UtilityID"]
+            schedules = supabase.table("Schedule_Table").select("ScheduleID").eq("UtilityID", utility_id).execute().data
+            
+            if schedules and len(schedules) > 0:
+                utilities_with_schedules.append({
+                    "UtilityID": utility["UtilityID"],
+                    "UtilityName": utility["UtilityName"],
+                    "has_schedules": True
+                })
+            else:
+                utilities_with_schedules.append({
+                    "UtilityID": utility["UtilityID"],
+                    "UtilityName": utility["UtilityName"],
+                    "has_schedules": False
+                })
+        
+        # If no utilities have schedules, return a message
+        if all(not u.get("has_schedules", False) for u in utilities_with_schedules):
+            return {
+                "no_schedules": True, 
+                "utilities": utilities_with_schedules,
+                "message": f"No schedule data available for utilities in {state}"
+            }
+        
+        return utilities_with_schedules
+    except Exception as e:
+        st.error(f"Error fetching utilities: {str(e)}")
+        return []
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def get_schedules(utility_id):
+    """Get schedules for a selected utility"""
+    try:
+        result = supabase.table("Schedule_Table") \
+            .select("ScheduleID, ScheduleName, ScheduleDescription") \
+            .eq("UtilityID", utility_id) \
+            .execute()
+        return result.data
+    except Exception as e:
+        st.error(f"Error fetching schedules: {str(e)}")
+        return []
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def get_schedule_details(schedule_id):
+    """Get schedule details"""
+    try:
+        schedule = supabase.table("Schedule_Table").select("*").eq("ScheduleID", schedule_id).single().execute().data
+
+        detail_tables = [
+            "DemandTime_Table",
+            "Demand_Table",
+            "EnergyTime_Table",
+            "Energy_Table",
+            "IncrementalDemand_Table",
+            "IncrementalEnergy_Table",
+            "ReactiveDemand_Table",
+            "ServiceCharge_Table",
+            "OtherCharges_Table",
+            "TaxInfo_Table",
+            "Percentages_Table",
+            "Notes_Table"
+        ]
+
+        details = {}
+        present_tables = []
+
+        for table in detail_tables:
+            res = supabase.table(table).select("*").eq("ScheduleID", schedule_id).execute()
+            if res.data:
+                details[table] = res.data
+                present_tables.append(table)
+
+        return {
+            "schedule": schedule,
+            "present_tables": present_tables,
+            "details": details
+        }
+    except Exception as e:
+        st.error(f"Error fetching schedule details: {str(e)}")
+        return None
+
+# Main app
+def main():
+    # Sidebar for navigation
+    st.sidebar.title("⚡ Utility Bill Estimator")
+    
+    # Navigation
+    page = st.sidebar.radio("Navigation", ["Bill Estimator", "Browse Schedules", "Compare Rates"])
+    
+    if page == "Bill Estimator":
+        show_bill_estimator()
+    elif page == "Browse Schedules":
+        show_browse_schedules()
+    elif page == "Compare Rates":
+        show_compare_rates()
+
+def show_bill_estimator():
+    st.title("⚡ Utility Bill Estimator")
+    st.write("Estimate your utility bill based on usage, demand, and rate schedule.")
+    
+    # Set up columns for input
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # State selection
+        states = get_all_states()
+        selected_state = st.selectbox("Select State", states)
+        
+        # Utility selection
+        if selected_state:
+            utilities = get_utilities_by_state(selected_state)
+            
+            if isinstance(utilities, dict) and utilities.get("no_utilities"):
+                st.warning(utilities.get("message", "No utilities found for this state."))
+            elif isinstance(utilities, dict) and utilities.get("no_schedules"):
+                utility_options = [(u["UtilityID"], u["UtilityName"]) for u in utilities.get("utilities", [])]
+                if utility_options:
+                    utility_ids, utility_names = zip(*utility_options)
+                    selected_utility_index = st.selectbox("Select Utility", range(len(utility_names)), format_func=lambda i: utility_names[i])
+                    selected_utility_id = utility_ids[selected_utility_index]
+                    st.warning(utilities.get("message", "No schedules available for this utility."))
+                else:
+                    st.warning("No utilities found with schedules.")
+            else:
+                # Filter out utilities with no schedules
+                utilities_with_schedules = [u for u in utilities if u.get("has_schedules", False)]
+                
+                if not utilities_with_schedules:
+                    st.warning(f"No utilities with rate schedules found for {selected_state}.")
+                else:
+                    utility_options = [(u["UtilityID"], u["UtilityName"]) for u in utilities_with_schedules]
+                    utility_ids, utility_names = zip(*utility_options)
+                    selected_utility_index = st.selectbox("Select Utility", range(len(utility_names)), format_func=lambda i: utility_names[i])
+                    selected_utility_id = utility_ids[selected_utility_index]
+                    
+                    # Schedule selection
+                    schedules = get_schedules(selected_utility_id)
+                    if schedules:
+                        schedule_options = [(s["ScheduleID"], s["ScheduleName"]) for s in schedules]
+                        schedule_ids, schedule_names = zip(*schedule_options)
+                        selected_schedule_index = st.selectbox("Select Rate Schedule", range(len(schedule_names)), format_func=lambda i: schedule_names[i])
+                        selected_schedule_id = schedule_ids[selected_schedule_index]
+                    else:
+                        st.warning("No rate schedules available for this utility.")
+    
+    with col2:
+        # Usage inputs
+        usage_kwh = st.number_input("Monthly Energy Usage (kWh)", min_value=0.0, value=1000.0, step=100.0)
+        demand_kw = st.number_input("Monthly Demand (kW)", min_value=0.0, value=5.0, step=1.0)
+        billing_days = st.number_input("Billing Days", min_value=1, value=30, step=1)
+        voltage = st.number_input("Voltage (kV, optional)", min_value=0.0, value=None, step=1.0)
+    
+    # Calculate button
+    calculate_pressed = st.button("Calculate Bill")
+    
+    if calculate_pressed and 'selected_schedule_id' in locals():
+        with st.spinner("Calculating bill..."):
+            result = calculate_bill(
+                selected_schedule_id, 
+                usage_kwh, 
+                demand_kw, 
+                billing_days, 
+                voltage
+            )
+            
+            if result:
+                # Display results
+                st.success(f"Total Estimated Bill: ${result['total_cost']:.2f}")
+                
+                # Breakdown of charges
+                st.subheader("Bill Breakdown")
+                breakdown = result["breakdown"]
+                
+                # Create a formatted table
+                data = []
+                for charge_type, amount in breakdown.items():
+                    data.append([charge_type, f"${amount:.2f}"])
+                
+                # Display as a table
+                st.table({"Charge Type": [item[0] for item in data], 
+                         "Amount": [item[1] for item in data]})
+
+def show_browse_schedules():
+    st.title("Browse Rate Schedules")
+    st.write("View detailed information about utility rate schedules.")
+    
+    # State selection
+    states = get_all_states()
+    selected_state = st.selectbox("Select State", states)
+    
+    # Utility selection
+    if selected_state:
+        utilities = get_utilities_by_state(selected_state)
+        
+        if isinstance(utilities, dict) and utilities.get("no_utilities"):
+            st.warning(utilities.get("message", "No utilities found for this state."))
+        elif isinstance(utilities, dict) and utilities.get("no_schedules"):
+            utility_options = [(u["UtilityID"], u["UtilityName"]) for u in utilities.get("utilities", [])]
+            if utility_options:
+                utility_ids, utility_names = zip(*utility_options)
+                selected_utility_index = st.selectbox("Select Utility", range(len(utility_names)), format_func=lambda i: utility_names[i])
+                selected_utility_id = utility_ids[selected_utility_index]
+                st.warning(utilities.get("message", "No schedules available for this utility."))
+            else:
+                st.warning("No utilities found with schedules.")
+        else:
+            utility_options = [(u["UtilityID"], u["UtilityName"]) for u in utilities]
+            utility_ids, utility_names = zip(*utility_options)
+            selected_utility_index = st.selectbox("Select Utility", range(len(utility_names)), format_func=lambda i: utility_names[i])
+            selected_utility_id = utility_ids[selected_utility_index]
+            
+            # Schedule selection
+            schedules = get_schedules(selected_utility_id)
+            if schedules:
+                schedule_options = [(s["ScheduleID"], s["ScheduleName"]) for s in schedules]
+                schedule_ids, schedule_names = zip(*schedule_options)
+                selected_schedule_index = st.selectbox("Select Rate Schedule", range(len(schedule_names)), format_func=lambda i: schedule_names[i])
+                selected_schedule_id = schedule_ids[selected_schedule_index]
+                
+                # Show schedule details
+                schedule_details = get_schedule_details(selected_schedule_id)
+                
+                if schedule_details:
+                    st.subheader(f"Schedule: {schedule_names[selected_schedule_index]}")
+                    
+                    # Basic schedule info
+                    schedule = schedule_details.get("schedule", {})
+                    st.write(f"Description: {schedule.get('ScheduleDescription', 'N/A')}")
+                    
+                    # Display tables that are present for this schedule
+                    present_tables = schedule_details.get("present_tables", [])
+                    details = schedule_details.get("details", {})
+                    
+                    # Create expandable sections for each table type
+                    table_display_names = {
+                        "ServiceCharge_Table": "Service Charges",
+                        "Energy_Table": "Energy Charges",
+                        "Demand_Table": "Demand Charges",
+                        "EnergyTime_Table": "Time-of-Use Energy Charges",
+                        "DemandTime_Table": "Time-of-Use Demand Charges",
+                        "IncrementalEnergy_Table": "Tiered Energy Charges",
+                        "IncrementalDemand_Table": "Tiered Demand Charges",
+                        "ReactiveDemand_Table": "Reactive Demand Charges",
+                        "OtherCharges_Table": "Other Charges",
+                        "TaxInfo_Table": "Taxes",
+                        "Percentages_Table": "Percentage-based Charges",
+                        "Notes_Table": "Notes"
+                    }
+                    
+                    for table_name in present_tables:
+                        display_name = table_display_names.get(table_name, table_name)
+                        with st.expander(f"{display_name}"):
+                            table_data = details.get(table_name, [])
+                            
+                            if table_data:
+                                # Format the data for display
+                                # Remove technical fields and rename for clarity
+                                display_data = []
+                                for row in table_data:
+                                    clean_row = {k: v for k, v in row.items() 
+                                                if k not in ["ScheduleID", "id"] and not k.startswith("created_")}
+                                    display_data.append(clean_row)
+                                
+                                # Display as a table
+                                if display_data:
+                                    st.dataframe(display_data)
+                            else:
+                                st.write("No data available.")
+                else:
+                    st.warning("No schedule details available.")
+            else:
+                st.warning("No rate schedules available for this utility.")
+
+def show_compare_rates():
+    st.title("Compare Rate Schedules")
+    st.write("Compare utility rate schedules to find the best option for your usage pattern.")
+    
+    # Set up columns for inputs
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # State selection
+        states = get_all_states()
+        selected_state = st.selectbox("Select State", states)
+        
+        # Usage inputs
+        usage_kwh = st.number_input("Monthly Energy Usage (kWh)", min_value=0.0, value=1000.0, step=100.0, key="compare_kwh")
+        demand_kw = st.number_input("Monthly Demand (kW)", min_value=0.0, value=5.0, step=1.0, key="compare_kw")
+        billing_days = st.number_input("Billing Days", min_value=1, value=30, step=1, key="compare_days")
+        voltage = st.number_input("Voltage (kV, optional)", min_value=0.0, value=None, step=1.0, key="compare_voltage")
+    
+    with col2:
+        # Utility selection
+        if selected_state:
+            utilities = get_utilities_by_state(selected_state)
+            
+            if isinstance(utilities, dict) and utilities.get("no_utilities"):
+                st.warning(utilities.get("message", "No utilities found for this state."))
+            elif isinstance(utilities, dict) and utilities.get("no_schedules"):
+                st.warning(utilities.get("message", "No schedules available for utilities in this state."))
+            else:
+                utility_options = [(u["UtilityID"], u["UtilityName"]) for u in utilities if u.get("has_schedules", False)]
+                
+                if not utility_options:
+                    st.warning(f"No utilities with rate schedules found for {selected_state}.")
+                else:
+                    utility_ids, utility_names = zip(*utility_options)
+                    selected_utility_index = st.selectbox("Select Utility", range(len(utility_names)), format_func=lambda i: utility_names[i])
+                    selected_utility_id = utility_ids[selected_utility_index]
+                    
+                    # Get schedules for this utility
+                    schedules = get_schedules(selected_utility_id)
+                    
+                    if schedules:
+                        # Allow multiple schedule selection for comparison
+                        schedule_options = [(s["ScheduleID"], s["ScheduleName"]) for s in schedules]
+                        schedule_ids, schedule_names = zip(*schedule_options)
+                        
+                        # Create a multiselect for choosing schedules to compare
+                        selected_schedules = st.multiselect(
+                            "Select Schedules to Compare",
+                            options=schedule_ids,
+                            format_func=lambda x: next((s["ScheduleName"] for s in schedules if s["ScheduleID"] == x), "Unknown"),
+                            default=schedule_ids[0:min(2, len(schedule_ids))]  # Default select first 2 schedules
+                        )
+                    else:
+                        st.warning("No rate schedules available for this utility.")
+    
+    # Compare button
+    compare_pressed = st.button("Compare Schedules")
+    
+    if compare_pressed and 'selected_schedules' in locals() and selected_schedules:
+        with st.spinner("Calculating and comparing bills..."):
+            # Calculate bill for each selected schedule
+            results = []
+            
+            for schedule_id in selected_schedules:
+                result = calculate_bill(
+                    schedule_id, 
+                    usage_kwh, 
+                    demand_kw, 
+                    billing_days, 
+                    voltage
+                )
+                
+                if result:
+                    # Get schedule name
+                    schedule_name = next((s["ScheduleName"] for s in schedules if s["ScheduleID"] == schedule_id), "Unknown")
+                    
+                    results.append({
+                        "schedule_id": schedule_id,
+                        "schedule_name": schedule_name,
+                        "total_cost": result["total_cost"],
+                        "breakdown": result["breakdown"]
+                    })
+            
+            if results:
+                # Sort by total cost
+                results.sort(key=lambda x: x["total_cost"])
+                
+                # Create comparison visualization
+                st.subheader("Bill Comparison Results")
+                
+                # Comparison table
+                comparison_data = {
+                    "Schedule": [r["schedule_name"] for r in results],
+                    "Total Cost": [f"${r['total_cost']:.2f}" for r in results]
+                }
+                
+                # Add breakdown categories to comparison
+                all_categories = set()
+                for r in results:
+                    all_categories.update(r["breakdown"].keys())
+                
+                for category in sorted(all_categories):
+                    comparison_data[category] = [f"${r['breakdown'].get(category, 0):.2f}" for r in results]
+                
+                st.table(comparison_data)
+                
+                # Create bar chart for visual comparison
+                import altair as alt
+                import pandas as pd
+                
+                chart_data = pd.DataFrame({
+                    'Schedule': [r["schedule_name"] for r in results],
+                    'Cost': [r["total_cost"] for r in results]
+                })
+                
+                chart = alt.Chart(chart_data).mark_bar().encode(
+                    x=alt.X('Schedule', sort=None),
+                    y='Cost',
+                    color='Schedule'
+                ).properties(
+                    title='Total Cost Comparison'
+                )
+                
+                st.altair_chart(chart, use_container_width=True)
+                
+                # Show the best option
+                if len(results) > 1:
+                    best_option = results[0]  # Already sorted by cost
+                    savings = results[1]["total_cost"] - best_option["total_cost"]
+                    
+                    st.success(f"Best option: {best_option['schedule_name']} (${best_option['total_cost']:.2f})")
+                    
+                    if savings > 0:
+                        st.info(f"Potential savings: ${savings:.2f} compared to {results[1]['schedule_name']}")
+            else:
+                st.warning("Could not calculate bills for the selected schedules.")
+        
 if __name__ == "__main__":
-    app.run(debug=True)
+    main()
