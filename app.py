@@ -32,19 +32,27 @@ def browse_schedules():
 @app.route("/states")
 def get_states():
     try:
-        utilities = supabase.table("Utility").select("UtilityID, State").execute().data
+        # First, get all schedules to find which utility IDs have schedules
         schedules = supabase.table("Schedule_Table").select("UtilityID").execute().data
-
+        
+        # Create a set of utility IDs that have at least one schedule
         utility_ids_with_schedules = {s['UtilityID'] for s in schedules if s.get('UtilityID') is not None}
-
-        states_with_schedules = set()
-        for util in utilities:
-            if util['UtilityID'] in utility_ids_with_schedules:
-                states_with_schedules.add(util['State'])
-
-        return jsonify(sorted(states_with_schedules))
-
+        
+        # Get all utilities that have schedules
+        utilities_with_schedules = []
+        for util_id in utility_ids_with_schedules:
+            utility = supabase.table("Utility").select("UtilityID, State, UtilityName").eq("UtilityID", util_id).execute().data
+            if utility and len(utility) > 0:
+                utilities_with_schedules.extend(utility)
+        
+        # Extract unique states from utilities with schedules
+        states_with_schedules = {util['State'] for util in utilities_with_schedules if util.get('State') is not None}
+        
+        print(f"States with schedules: {states_with_schedules}")  # Debug log
+        
+        return jsonify(sorted(list(states_with_schedules)))
     except Exception as e:
+        print(f"Error in get_states: {str(e)}")  # Debug log
         return jsonify({"error": str(e)}), 500
 
 # GET Utilities filtered by selected State
@@ -52,19 +60,26 @@ def get_states():
 def get_utilities_by_state():
     state = request.args.get("state")
     try:
+        # Get all utilities in the selected state
         utilities = supabase.table("Utility").select("UtilityID, UtilityName, State").eq("State", state).execute().data
+        
+        # Get all schedules
         schedules = supabase.table("Schedule_Table").select("UtilityID").execute().data
-
+        
+        # Create a set of utility IDs that have at least one schedule
         utility_ids_with_schedules = {s['UtilityID'] for s in schedules if s.get('UtilityID') is not None}
-
+        
+        # Filter utilities to only include those with schedules
         filtered_utilities = [
             {"UtilityID": u["UtilityID"], "UtilityName": u["UtilityName"]}
             for u in utilities if u["UtilityID"] in utility_ids_with_schedules
         ]
-
+        
+        print(f"Filtered utilities for state {state}: {filtered_utilities}")  # Debug log
+        
         return jsonify(filtered_utilities)
-
     except Exception as e:
+        print(f"Error in get_utilities_by_state: {str(e)}")  # Debug log
         return jsonify({"error": str(e)}), 500
 
 # GET Schedules for a selected Utility
@@ -565,6 +580,63 @@ def calculate_bill():
 @app.route("/compare_rates")
 def compare_rates():
     return render_template("compare_rates.html")
+
+# Diagnostic endpoint to help troubleshoot state/utility/schedule relationships
+@app.route("/diagnostic")
+def diagnostic():
+    try:
+        # Get all schedules
+        schedules = supabase.table("Schedule_Table").select("ScheduleID, UtilityID, ScheduleName").execute().data
+        
+        # Get all utilities
+        utilities = supabase.table("Utility").select("UtilityID, UtilityName, State").execute().data
+        
+        # Create a dictionary to map UtilityID to utility details
+        utility_map = {u["UtilityID"]: u for u in utilities}
+        
+        # Create a comprehensive report of what's in the database
+        utility_schedules = {}
+        state_utilities = {}
+        
+        for schedule in schedules:
+            util_id = schedule.get("UtilityID")
+            if util_id is None:
+                continue
+                
+            if util_id not in utility_schedules:
+                utility_schedules[util_id] = []
+                
+            utility_schedules[util_id].append({
+                "ScheduleID": schedule.get("ScheduleID"),
+                "ScheduleName": schedule.get("ScheduleName")
+            })
+            
+            # Get the utility details
+            utility = utility_map.get(util_id)
+            if utility:
+                state = utility.get("State")
+                if state:
+                    if state not in state_utilities:
+                        state_utilities[state] = []
+                        
+                    if util_id not in [u["UtilityID"] for u in state_utilities[state]]:
+                        state_utilities[state].append({
+                            "UtilityID": util_id,
+                            "UtilityName": utility.get("UtilityName")
+                        })
+        
+        # Prepare the results
+        results = {
+            "states_with_utilities": list(state_utilities.keys()),
+            "utility_count_by_state": {state: len(utils) for state, utils in state_utilities.items()},
+            "schedule_count_by_utility": {util_id: len(scheds) for util_id, scheds in utility_schedules.items()},
+            "state_utility_details": state_utilities,
+            "utility_schedule_details": utility_schedules
+        }
+        
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ----------------------
 # RUN APP
