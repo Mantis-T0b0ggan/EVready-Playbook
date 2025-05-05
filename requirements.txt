@@ -1,4 +1,5 @@
-Flask
-python-dotenv
+steamlit
 supabase
-gunicorn
+python-dotenv
+pandas
+altair
