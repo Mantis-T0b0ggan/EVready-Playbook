@@ -28,7 +28,7 @@ def home():
 def browse_schedules():
     return render_template("browse_schedules.html")
 
-# GET States that have Utilities with at least one Schedule
+# GET States that have Utilities with at least one Schedule in EVready Database
 @app.route("/states")
 def get_states():
     try:
@@ -38,17 +38,18 @@ def get_states():
         # Create a set of utility IDs that have at least one schedule
         utility_ids_with_schedules = {s['UtilityID'] for s in schedules if s.get('UtilityID') is not None}
         
+        print(f"Utility IDs with schedules: {utility_ids_with_schedules}")  # Debug log
+        
         # Get all utilities that have schedules
-        utilities_with_schedules = []
+        states_with_schedules = set()
         for util_id in utility_ids_with_schedules:
-            utility = supabase.table("Utility").select("UtilityID, State, UtilityName").eq("UtilityID", util_id).execute().data
+            utility = supabase.table("Utility").select("State").eq("UtilityID", util_id).execute().data
             if utility and len(utility) > 0:
-                utilities_with_schedules.extend(utility)
+                state_abbr = utility[0].get('State')
+                if state_abbr:
+                    states_with_schedules.add(state_abbr)
         
-        # Extract unique states from utilities with schedules
-        states_with_schedules = {util['State'] for util in utilities_with_schedules if util.get('State') is not None}
-        
-        print(f"States with schedules: {states_with_schedules}")  # Debug log
+        print(f"States with schedules (abbreviations): {states_with_schedules}")  # Debug log
         
         return jsonify(sorted(list(states_with_schedules)))
     except Exception as e:
@@ -587,9 +588,11 @@ def diagnostic():
     try:
         # Get all schedules
         schedules = supabase.table("Schedule_Table").select("ScheduleID, UtilityID, ScheduleName").execute().data
+        print(f"Found {len(schedules)} schedules in database")
         
         # Get all utilities
         utilities = supabase.table("Utility").select("UtilityID, UtilityName, State").execute().data
+        print(f"Found {len(utilities)} utilities in database")
         
         # Create a dictionary to map UtilityID to utility details
         utility_map = {u["UtilityID"]: u for u in utilities}
@@ -614,16 +617,24 @@ def diagnostic():
             # Get the utility details
             utility = utility_map.get(util_id)
             if utility:
-                state = utility.get("State")
-                if state:
-                    if state not in state_utilities:
-                        state_utilities[state] = []
+                state_abbr = utility.get("State")
+                if state_abbr:
+                    if state_abbr not in state_utilities:
+                        state_utilities[state_abbr] = []
                         
-                    if util_id not in [u["UtilityID"] for u in state_utilities[state]]:
-                        state_utilities[state].append({
+                    if util_id not in [u["UtilityID"] for u in state_utilities[state_abbr]]:
+                        state_utilities[state_abbr].append({
                             "UtilityID": util_id,
                             "UtilityName": utility.get("UtilityName")
                         })
+        
+        # Check specifically for Tennessee (TN)
+        tn_utilities = [u for u in utilities if u.get("State") == "TN"]
+        tn_utility_ids = [u["UtilityID"] for u in tn_utilities]
+        tn_utility_with_schedules = [
+            util_id for util_id in tn_utility_ids 
+            if util_id in utility_schedules
+        ]
         
         # Prepare the results
         results = {
@@ -631,13 +642,19 @@ def diagnostic():
             "utility_count_by_state": {state: len(utils) for state, utils in state_utilities.items()},
             "schedule_count_by_utility": {util_id: len(scheds) for util_id, scheds in utility_schedules.items()},
             "state_utility_details": state_utilities,
-            "utility_schedule_details": utility_schedules
+            "utility_schedule_details": utility_schedules,
+            "tennessee_check": {
+                "tn_utilities": tn_utilities,
+                "tn_utility_ids": tn_utility_ids,
+                "tn_utilities_with_schedules": tn_utility_with_schedules
+            }
         }
         
         return jsonify(results)
     except Exception as e:
+        print(f"Error in diagnostic: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
+        
 # ----------------------
 # RUN APP
 # ----------------------
