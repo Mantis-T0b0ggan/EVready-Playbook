@@ -79,6 +79,7 @@
 <nav>
     <a href="/">Bill Estimator</a>
     <a href="/browse_schedules" class="active">Schedule Browser</a>
+    <a href="/compare_rates">Rate Comparison</a>
 </nav>
 
 <h1>Browse Utility Schedules</h1>
@@ -103,79 +104,100 @@
 
 <script>
     async function fetchStates() {
-        const res = await fetch('/get_states');
-        const states = await res.json();
-        const select = document.getElementById('state');
-        select.innerHTML = '<option value="">-- Select a State --</option>';
-        states.forEach(state => {
-            select.innerHTML += `<option value="${state}">${state}</option>`;
-        });
+        try {
+            const res = await fetch('/states');
+            if (!res.ok) {
+                throw new Error(`HTTP error! Status: ${res.status}`);
+            }
+            const states = await res.json();
+            const select = document.getElementById('state');
+            select.innerHTML = '<option value="">-- Select a State --</option>';
+            states.forEach(state => {
+                select.innerHTML += `<option value="${state}">${state}</option>`;
+            });
+        } catch (error) {
+            console.error("Error fetching states:", error);
+        }
     }
 
     async function fetchUtilities(state) {
-        const res = await fetch(`/get_utilities_by_state?state=${state}`);
-        const utilities = await res.json();
-        const select = document.getElementById('utility');
-        select.innerHTML = '<option value="">-- Select a Utility --</option>';
-        utilities.forEach(util => {
-            select.innerHTML += `<option value="${util.UtilityID}">${util.UtilityName}</option>`;
-        });
+        try {
+            const res = await fetch(`/get_utilities_by_state?state=${state}`);
+            if (!res.ok) {
+                throw new Error(`HTTP error! Status: ${res.status}`);
+            }
+            const utilities = await res.json();
+            const select = document.getElementById('utility');
+            select.innerHTML = '<option value="">-- Select a Utility --</option>';
+            utilities.forEach(util => {
+                select.innerHTML += `<option value="${util.UtilityID}">${util.UtilityName}</option>`;
+            });
+        } catch (error) {
+            console.error("Error fetching utilities:", error);
+        }
     }
 
     async function fetchSchedules(utilityId) {
-        const res = await fetch(`/get_schedules_by_utility?utility_id=${utilityId}`);
-        const schedules = await res.json();
-        const table = document.getElementById('scheduleTable');
-        const thead = table.querySelector('thead');
-        const tbody = table.querySelector('tbody');
-        tbody.innerHTML = '';
-        thead.innerHTML = '';
+        try {
+            const res = await fetch(`/get_schedules_by_utility?utility_id=${utilityId}`);
+            if (!res.ok) {
+                throw new Error(`HTTP error! Status: ${res.status}`);
+            }
+            const schedules = await res.json();
+            const table = document.getElementById('scheduleTable');
+            const thead = table.querySelector('thead');
+            const tbody = table.querySelector('tbody');
+            tbody.innerHTML = '';
+            thead.innerHTML = '';
 
-        if (schedules.length > 0) {
-            table.classList.remove('hidden');
+            if (schedules.length > 0) {
+                table.classList.remove('hidden');
 
-            // Get all unique keys
-            const allKeys = new Set();
-            schedules.forEach(schedule => {
-                Object.keys(schedule).forEach(key => allKeys.add(key));
-            });
-
-            const keysArray = Array.from(allKeys);
-
-            // Filter keys: Only keep keys with at least one non-null value
-            const filteredKeys = keysArray.filter(key => 
-                schedules.some(schedule => schedule[key] !== null && schedule[key] !== '' && schedule[key] !== undefined)
-            );
-
-            // Build table header
-            let headerRow = '<tr>';
-            filteredKeys.forEach(key => {
-                headerRow += `<th>${key}</th>`;
-            });
-            headerRow += '</tr>';
-            thead.innerHTML = headerRow;
-
-            // Build table rows
-            schedules.forEach(schedule => {
-                let row = '<tr>';
-                filteredKeys.forEach(key => {
-                    let value = schedule[key];
-                    if (value === undefined || value === null) {
-                        value = '';
-                    } else if (typeof value === 'number') {
-                        if (key.toLowerCase().includes('id')) {
-                            value = Math.round(value); // IDs like ScheduleID become integers
-                        } else {
-                            value = value.toFixed(4); // Keep Energy/Demand rates at 4 decimals
-                        }
-                    }
-                    row += `<td>${value}</td>`;
+                // Get all unique keys
+                const allKeys = new Set();
+                schedules.forEach(schedule => {
+                    Object.keys(schedule).forEach(key => allKeys.add(key));
                 });
-                row += '</tr>';
-                tbody.innerHTML += row;
-            });
-        } else {
-            table.classList.add('hidden');
+
+                const keysArray = Array.from(allKeys);
+
+                // Filter keys: Only keep keys with at least one non-null value
+                const filteredKeys = keysArray.filter(key => 
+                    schedules.some(schedule => schedule[key] !== null && schedule[key] !== '' && schedule[key] !== undefined)
+                );
+
+                // Build table header
+                let headerRow = '<tr>';
+                filteredKeys.forEach(key => {
+                    headerRow += `<th>${key}</th>`;
+                });
+                headerRow += '</tr>';
+                thead.innerHTML = headerRow;
+
+                // Build table rows
+                schedules.forEach(schedule => {
+                    let row = '<tr>';
+                    filteredKeys.forEach(key => {
+                        let value = schedule[key];
+                        if (value === undefined || value === null) {
+                            value = '';
+                        } else if (typeof value === 'number') {
+                            if (key.toLowerCase().includes('id')) {
+                                value = Math.round(value); // IDs like ScheduleID become integers
+                            } else {
+                                value = value.toFixed(4); // Keep Energy/Demand rates at 4 decimals
+                            }
+                        }
+                        row += `<td>${value}</td>`;
+                    });
+                    row += '</tr>';
+                    tbody.innerHTML += row;
+                });
+            } else {
+                table.classList.add('hidden');
+            }
+        } catch (error) {
+            console.error("Error fetching schedules:", error);
         }
     }
 
@@ -206,7 +228,9 @@
     });
 
     // Initial load
-    fetchStates();
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchStates();
+    });
 </script>
 
 </body>
