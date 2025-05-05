@@ -653,11 +653,6 @@ def diagnostic():
             "schedule_count_by_utility": {util_id: len(scheds) for util_id, scheds in utility_schedules.items()},
             "state_utility_details": state_utilities,
             "utility_schedule_details": utility_schedules,
-            "tennessee_check": {
-                "tn_utilities": tn_utilities,
-                "tn_utility_ids": tn_utility_ids,
-                "tn_utilities_with_schedules": tn_utility_with_schedules
-            }
         }
         
         return jsonify(results)
