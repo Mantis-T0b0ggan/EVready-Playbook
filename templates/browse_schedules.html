@@ -89,6 +89,78 @@
             color: #2e7d32;
             border: 1px solid #a5d6a7;
         }
+        
+        /* New styles for rate details */
+        .selected {
+            background-color: #e8f5e9 !important;
+        }
+        
+        #scheduleTable tbody tr {
+            cursor: pointer;
+        }
+        
+        #scheduleTable tbody tr:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .tab-container {
+            display: flex;
+            flex-wrap: wrap;
+            margin-top: 20px;
+            border-bottom: 1px solid #ccc;
+        }
+        
+        .tab-button {
+            padding: 10px 15px;
+            margin-right: 5px;
+            background-color: #f2f2f2;
+            border: 1px solid #ccc;
+            border-bottom: none;
+            cursor: pointer;
+        }
+        
+        .tab-button.active {
+            background-color: white;
+            border-bottom: 1px solid white;
+            margin-bottom: -1px;
+        }
+        
+        .tab-content-container {
+            border: 1px solid #ccc;
+            border-top: none;
+            padding: 15px;
+            min-height: 200px;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .rate-details-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+        
+        .rate-details-table th, .rate-details-table td {
+            padding: 8px;
+            border: 1px solid #ccc;
+            text-align: center;
+        }
+        
+        .rate-details-table th {
+            background-color: #f2f2f2;
+        }
+        
+        #rateDetailsSection h2 {
+            margin-top: 20px;
+            color: #1B2A49;
+        }
     </style>
 </head>
 
@@ -122,6 +194,9 @@
     <thead></thead>
     <tbody></tbody>
 </table>
+
+<!-- Rate Details Section - will be populated dynamically -->
+<div id="rateDetailsSection" class="hidden"></div>
 
 <script>
     // Debug helper function
@@ -167,6 +242,162 @@
             messageElement.classList.add('hidden');
             messageElement.textContent = '';
         }
+    }
+
+    // Fetch detailed rate data for a selected schedule
+    async function fetchScheduleRateDetails(scheduleId) {
+        try {
+            logData("Fetching rate details for schedule", scheduleId);
+            const res = await fetch(`/schedule_details?schedule_id=${scheduleId}`);
+            if (!res.ok) {
+                throw new Error(`HTTP error! Status: ${res.status}`);
+            }
+            const details = await res.json();
+            logData("Schedule details received", details);
+            return details;
+        } catch (error) {
+            console.error("Error fetching schedule details:", error);
+            showMessage("Error loading schedule details: " + error.message, true);
+            return null;
+        }
+    }
+
+    // Format table name for display
+    function formatTableName(tableName) {
+        // Remove "_Table" suffix and add spaces between words
+        return tableName.replace('_Table', '')
+            .replace(/([A-Z])/g, ' $1')
+            .trim();
+    }
+
+    // Display the rate details in the UI
+    function displayRateDetails(details) {
+        // Create or clear the details section
+        let detailsSection = document.getElementById('rateDetailsSection');
+        if (!detailsSection) {
+            detailsSection = document.createElement('div');
+            detailsSection.id = 'rateDetailsSection';
+            document.getElementById('scheduleTable').after(detailsSection);
+        }
+        detailsSection.innerHTML = '';
+        detailsSection.classList.remove('hidden');
+        
+        // Add heading
+        const heading = document.createElement('h2');
+        heading.textContent = `Rate Details for Schedule: ${details.schedule.ScheduleName}`;
+        detailsSection.appendChild(heading);
+        
+        // If no detailed data exists
+        if (details.present_tables.length === 0) {
+            const noData = document.createElement('p');
+            noData.textContent = 'No detailed rate data available for this schedule.';
+            detailsSection.appendChild(noData);
+            return;
+        }
+        
+        // Create tabs for each type of rate data
+        const tabContainer = document.createElement('div');
+        tabContainer.className = 'tab-container';
+        detailsSection.appendChild(tabContainer);
+        
+        const contentContainer = document.createElement('div');
+        contentContainer.className = 'tab-content-container';
+        detailsSection.appendChild(contentContainer);
+        
+        // Add tabs and content for each present table
+        details.present_tables.forEach((tableType, index) => {
+            // Create tab
+            const tab = document.createElement('button');
+            tab.className = 'tab-button';
+            tab.textContent = formatTableName(tableType);
+            if (index === 0) tab.classList.add('active');
+            tab.onclick = () => switchTab(tableType);
+            tabContainer.appendChild(tab);
+            
+            // Create content
+            const content = document.createElement('div');
+            content.id = `tab-${tableType}`;
+            content.className = 'tab-content';
+            if (index === 0) content.classList.add('active');
+            
+            // Create table to display this rate data
+            const table = createTableForRateData(tableType, details.details[tableType]);
+            content.appendChild(table);
+            
+            contentContainer.appendChild(content);
+        });
+    }
+
+    // Create a table to display rate data
+    function createTableForRateData(tableType, data) {
+        const table = document.createElement('table');
+        table.className = 'rate-details-table';
+        
+        // Get all unique keys
+        const allKeys = new Set();
+        data.forEach(item => {
+            Object.keys(item).forEach(key => allKeys.add(key));
+        });
+        
+        // Filter out keys with all null values
+        const filteredKeys = Array.from(allKeys).filter(key => 
+            data.some(item => item[key] !== null && item[key] !== '' && item[key] !== undefined)
+        );
+        
+        // Create header row
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        filteredKeys.forEach(key => {
+            const th = document.createElement('th');
+            th.textContent = key;
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+        
+        // Create body rows
+        const tbody = document.createElement('tbody');
+        data.forEach(item => {
+            const row = document.createElement('tr');
+            filteredKeys.forEach(key => {
+                const td = document.createElement('td');
+                let value = item[key];
+                if (value === undefined || value === null) {
+                    value = '';
+                } else if (typeof value === 'number') {
+                    if (key.toLowerCase().includes('id')) {
+                        value = Math.round(value);
+                    } else {
+                        value = value.toFixed(4);
+                    }
+                }
+                td.textContent = value;
+                row.appendChild(td);
+            });
+            tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+        
+        return table;
+    }
+
+    // Switch between tabs
+    function switchTab(tableType) {
+        // Update active tab button
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.classList.remove('active');
+        });
+        document.querySelectorAll('.tab-button').forEach(button => {
+            if (button.textContent === formatTableName(tableType)) {
+                button.classList.add('active');
+            }
+        });
+        
+        // Update active content
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.getElementById(`tab-${tableType}`).classList.add('active');
     }
 
     async function fetchStates() {
@@ -266,6 +497,13 @@
             tbody.innerHTML = '';
             thead.innerHTML = '';
 
+            // Clear any existing rate details
+            const detailsSection = document.getElementById('rateDetailsSection');
+            if (detailsSection) {
+                detailsSection.classList.add('hidden');
+                detailsSection.innerHTML = '';
+            }
+
             if (schedules && schedules.length > 0) {
                 table.classList.remove('hidden');
 
@@ -283,31 +521,53 @@
                 );
 
                 // Build table header
-                let headerRow = '<tr>';
+                let headerRow = document.createElement('tr');
                 filteredKeys.forEach(key => {
-                    headerRow += `<th>${key}</th>`;
+                    const th = document.createElement('th');
+                    th.textContent = key;
+                    headerRow.appendChild(th);
                 });
-                headerRow += '</tr>';
-                thead.innerHTML = headerRow;
+                thead.appendChild(headerRow);
 
                 // Build table rows
                 schedules.forEach(schedule => {
-                    let row = '<tr>';
+                    let row = document.createElement('tr');
+                    row.dataset.scheduleId = schedule.ScheduleID;
+                    row.style.cursor = 'pointer';
+                    row.title = 'Click to view rate details';
+                    
                     filteredKeys.forEach(key => {
+                        let cell = document.createElement('td');
                         let value = schedule[key];
                         if (value === undefined || value === null) {
                             value = '';
                         } else if (typeof value === 'number') {
                             if (key.toLowerCase().includes('id')) {
-                                value = Math.round(value); // IDs like ScheduleID become integers
+                                value = Math.round(value);
                             } else {
-                                value = value.toFixed(4); // Keep Energy/Demand rates at 4 decimals
+                                value = value.toFixed(4);
                             }
                         }
-                        row += `<td>${value}</td>`;
+                        cell.textContent = value;
+                        row.appendChild(cell);
                     });
-                    row += '</tr>';
-                    tbody.innerHTML += row;
+                    
+                    // Add click handler to show rate details
+                    row.addEventListener('click', async () => {
+                        // Highlight the selected row
+                        document.querySelectorAll('#scheduleTable tbody tr').forEach(r => {
+                            r.classList.remove('selected');
+                        });
+                        row.classList.add('selected');
+                        
+                        // Fetch and display rate details
+                        const details = await fetchScheduleRateDetails(schedule.ScheduleID);
+                        if (details) {
+                            displayRateDetails(details);
+                        }
+                    });
+                    
+                    tbody.appendChild(row);
                 });
                 
                 logData("Schedule table populated", "Table updated with schedule data");
@@ -330,6 +590,13 @@
         } else {
             document.getElementById('utility').innerHTML = '<option value="">-- Select a Utility --</option>';
             document.getElementById('scheduleTable').classList.add('hidden');
+            
+            // Hide rate details section
+            const detailsSection = document.getElementById('rateDetailsSection');
+            if (detailsSection) {
+                detailsSection.classList.add('hidden');
+            }
+            
             clearMessage();
         }
     });
@@ -340,6 +607,13 @@
             fetchSchedules(selectedUtility);
         } else {
             document.getElementById('scheduleTable').classList.add('hidden');
+            
+            // Hide rate details section
+            const detailsSection = document.getElementById('rateDetailsSection');
+            if (detailsSection) {
+                detailsSection.classList.add('hidden');
+            }
+            
             clearMessage();
         }
     });
@@ -350,6 +624,14 @@
         document.getElementById('scheduleTable').classList.add('hidden');
         document.querySelector('thead').innerHTML = '';
         document.querySelector('tbody').innerHTML = '';
+        
+        // Hide rate details section
+        const detailsSection = document.getElementById('rateDetailsSection');
+        if (detailsSection) {
+            detailsSection.classList.add('hidden');
+            detailsSection.innerHTML = '';
+        }
+        
         clearMessage();
         fetchStates(); // Reload states
     });
