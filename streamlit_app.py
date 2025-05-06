@@ -103,177 +103,7 @@ with tab1:
                 utilities_data = utilities_response.data
             
             if not utilities_data:
-                st.warning(f"Error calculating other charges: {str(e)}")
-            
-            # 5. Calculate taxes
-            tax_amount = 0.0
-            subtotal = service_charge + energy_charge + demand_charge + other_charges
-            tax_breakdown = []
-            
-            try:
-                tax_query = f"""
-                SELECT * FROM TaxInfo_Table WHERE ScheduleID = {selected_schedule_id}
-                """
-                tax_response = supabase.rpc('execute_sql', {'query': tax_query}).execute()
-                
-                for tax in tax_response.data:
-                    tax_rate = float(tax.get("per_cent", 0))
-                    tax_desc = tax.get("type", "Tax")
-                    city = tax.get("city", "")
-                    basis = tax.get("basis", "")
-                    
-                    # Add city info to description if available
-                    if city:
-                        tax_desc = f"{tax_desc} ({city})"
-                    
-                    # Calculate tax amount based on percentage
-                    amount = subtotal * (tax_rate / 100)
-                    tax_amount += amount
-                    tax_breakdown.append({
-                        "Description": f"{tax_desc} ({tax_rate}%)",
-                        "Amount": amount
-                    })
-            except Exception as e:
-                st.warning(f"Error calculating taxes: {str(e)}")
-            
-            # Calculate total bill
-            total_bill = subtotal + tax_amount
-            
-            # Display the bill breakdown
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("### Bill Summary")
-                st.markdown(f"**Selected State:** {selected_state}")
-                st.markdown(f"**Selected Utility:** {selected_utility}")
-                st.markdown(f"**Selected Schedule:** {selected_schedule}")
-                st.markdown(f"**Billing Month:** {billing_month}")
-                
-                if has_energy_charges:
-                    st.markdown(f"**Energy Usage:** {usage_kwh} kWh")
-                if has_demand_charges:
-                    st.markdown(f"**Peak Demand:** {demand_kw} kW")
-                if has_reactive_demand:
-                    st.markdown(f"**Power Factor:** {power_factor}")
-                    
-                # Add a simple pie chart for visualization
-                if has_energy_charges or has_demand_charges:
-                    st.markdown("### Bill Visualization")
-                    
-                    # Prepare data for pie chart
-                    chart_data = {
-                        'Category': [],
-                        'Amount': []
-                    }
-                    
-                    # Add service charge
-                    if service_charge > 0:
-                        chart_data['Category'].append('Service Charge')
-                        chart_data['Amount'].append(service_charge)
-                    
-                    # Add energy charges
-                    if energy_charge > 0:
-                        chart_data['Category'].append('Energy Charges')
-                        chart_data['Amount'].append(energy_charge)
-                    
-                    # Add demand charges
-                    if demand_charge > 0:
-                        chart_data['Category'].append('Demand Charges')
-                        chart_data['Amount'].append(demand_charge)
-                    
-                    # Add other charges as a single item
-                    if other_charges > 0:
-                        chart_data['Category'].append('Other Charges')
-                        chart_data['Amount'].append(other_charges)
-                    
-                    # Add taxes as a single item
-                    if tax_amount > 0:
-                        chart_data['Category'].append('Taxes')
-                        chart_data['Amount'].append(tax_amount)
-                    
-                    # Create DataFrame
-                    chart_df = pd.DataFrame(chart_data)
-                    
-                    # Create pie chart
-                    fig, ax = plt.subplots(figsize=(4, 4))
-                    ax.pie(chart_df['Amount'], labels=chart_df['Category'], autopct='%1.1f%%')
-                    ax.set_title('Bill Composition')
-                    st.pyplot(fig)
-            
-            with col2:
-                st.markdown("### Charges Breakdown")
-                
-                # Create a dataframe for the bill breakdown
-                bill_items = []
-                
-                # Add service charges
-                for charge in service_charge_breakdown:
-                    bill_items.append(charge)
-                
-                # Add detailed energy charges breakdown
-                if has_energy_charges:
-                    if energy_charges_breakdown:
-                        for charge in energy_charges_breakdown:
-                            bill_items.append(charge)
-                    else:
-                        bill_items.append({"Description": "Energy Charges", "Amount": energy_charge})
-                
-                # Add detailed demand charges breakdown
-                if has_demand_charges:
-                    if demand_charges_breakdown:
-                        for charge in demand_charges_breakdown:
-                            bill_items.append(charge)
-                    else:
-                        bill_items.append({"Description": "Demand Charges", "Amount": demand_charge})
-                
-                # Add other charges
-                for charge in other_charges_breakdown:
-                    bill_items.append(charge)
-                
-                # Add subtotal line
-                bill_items.append({"Description": "Subtotal", "Amount": subtotal})
-                
-                # Add taxes
-                for tax in tax_breakdown:
-                    bill_items.append({"Description": tax["Description"], "Amount": tax["Amount"]})
-                
-                # Add total line
-                bill_items.append({"Description": "Total", "Amount": total_bill})
-                
-                # Convert to dataframe and display
-                bill_df = pd.DataFrame(bill_items)
-                
-                if not bill_df.empty:
-                    # Format the Amount column with currency formatting
-                    bill_df["Amount"] = bill_df["Amount"].map("${:.2f}".format)
-                    
-                    # Display the dataframe without index
-                    st.table(bill_df)
-                else:
-                    st.warning("No charges found for this schedule.")
-            
-            # Display a note about the bill estimate
-            st.info("Note: This is an estimate based on the selected rate schedule and may not reflect all potential charges or adjustments.")
-            
-            # Export option
-            if st.button("Export Bill Estimate to CSV"):
-                csv = bill_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Download CSV",
-                    data=csv,
-                    file_name=f"{selected_utility}_{selected_schedule}_bill_estimate.csv",
-                    mime="text/csv"
-                )
-
-# Tab 2: Rate Comparison (placeholder for future implementation)
-with tab2:
-    st.header("Rate Schedule Comparison")
-    st.info("This feature will allow you to compare different rate schedules. Coming soon!")
-
-# Tab 3: Schedule Browser (placeholder for future implementation)
-with tab3:
-    st.header("Utility Rate Schedule Browser")
-    st.info("This feature will allow you to browse through rate schedules. Coming soon!")(f"No utilities with rate schedules found in {selected_state}.")
+                st.warning(f"No utilities with rate schedules found in {selected_state}.")
             else:
                 # Create a dictionary for easy lookup of UtilityID by name
                 utilities_dict = {utility["utilityname"]: utility["utilityid"] for utility in utilities_data}
@@ -811,4 +641,174 @@ with tab3:
                         "Amount": charge_type
                     })
             except Exception as e:
-                st.warning
+                st.warning(f"Error calculating other charges: {str(e)}")
+            
+            # 5. Calculate taxes
+            tax_amount = 0.0
+            subtotal = service_charge + energy_charge + demand_charge + other_charges
+            tax_breakdown = []
+            
+            try:
+                tax_query = f"""
+                SELECT * FROM TaxInfo_Table WHERE ScheduleID = {selected_schedule_id}
+                """
+                tax_response = supabase.rpc('execute_sql', {'query': tax_query}).execute()
+                
+                for tax in tax_response.data:
+                    tax_rate = float(tax.get("per_cent", 0))
+                    tax_desc = tax.get("type", "Tax")
+                    city = tax.get("city", "")
+                    basis = tax.get("basis", "")
+                    
+                    # Add city info to description if available
+                    if city:
+                        tax_desc = f"{tax_desc} ({city})"
+                    
+                    # Calculate tax amount based on percentage
+                    amount = subtotal * (tax_rate / 100)
+                    tax_amount += amount
+                    tax_breakdown.append({
+                        "Description": f"{tax_desc} ({tax_rate}%)",
+                        "Amount": amount
+                    })
+            except Exception as e:
+                st.warning(f"Error calculating taxes: {str(e)}")
+            
+            # Calculate total bill
+            total_bill = subtotal + tax_amount
+            
+            # Display the bill breakdown
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### Bill Summary")
+                st.markdown(f"**Selected State:** {selected_state}")
+                st.markdown(f"**Selected Utility:** {selected_utility}")
+                st.markdown(f"**Selected Schedule:** {selected_schedule}")
+                st.markdown(f"**Billing Month:** {billing_month}")
+                
+                if has_energy_charges:
+                    st.markdown(f"**Energy Usage:** {usage_kwh} kWh")
+                if has_demand_charges:
+                    st.markdown(f"**Peak Demand:** {demand_kw} kW")
+                if has_reactive_demand:
+                    st.markdown(f"**Power Factor:** {power_factor}")
+                    
+                # Add a simple pie chart for visualization
+                if has_energy_charges or has_demand_charges:
+                    st.markdown("### Bill Visualization")
+                    
+                    # Prepare data for pie chart
+                    chart_data = {
+                        'Category': [],
+                        'Amount': []
+                    }
+                    
+                    # Add service charge
+                    if service_charge > 0:
+                        chart_data['Category'].append('Service Charge')
+                        chart_data['Amount'].append(service_charge)
+                    
+                    # Add energy charges
+                    if energy_charge > 0:
+                        chart_data['Category'].append('Energy Charges')
+                        chart_data['Amount'].append(energy_charge)
+                    
+                    # Add demand charges
+                    if demand_charge > 0:
+                        chart_data['Category'].append('Demand Charges')
+                        chart_data['Amount'].append(demand_charge)
+                    
+                    # Add other charges as a single item
+                    if other_charges > 0:
+                        chart_data['Category'].append('Other Charges')
+                        chart_data['Amount'].append(other_charges)
+                    
+                    # Add taxes as a single item
+                    if tax_amount > 0:
+                        chart_data['Category'].append('Taxes')
+                        chart_data['Amount'].append(tax_amount)
+                    
+                    # Create DataFrame
+                    chart_df = pd.DataFrame(chart_data)
+                    
+                    # Create pie chart
+                    fig, ax = plt.subplots(figsize=(4, 4))
+                    ax.pie(chart_df['Amount'], labels=chart_df['Category'], autopct='%1.1f%%')
+                    ax.set_title('Bill Composition')
+                    st.pyplot(fig)
+            
+            with col2:
+                st.markdown("### Charges Breakdown")
+                
+                # Create a dataframe for the bill breakdown
+                bill_items = []
+                
+                # Add service charges
+                for charge in service_charge_breakdown:
+                    bill_items.append(charge)
+                
+                # Add detailed energy charges breakdown
+                if has_energy_charges:
+                    if energy_charges_breakdown:
+                        for charge in energy_charges_breakdown:
+                            bill_items.append(charge)
+                    else:
+                        bill_items.append({"Description": "Energy Charges", "Amount": energy_charge})
+                
+                # Add detailed demand charges breakdown
+                if has_demand_charges:
+                    if demand_charges_breakdown:
+                        for charge in demand_charges_breakdown:
+                            bill_items.append(charge)
+                    else:
+                        bill_items.append({"Description": "Demand Charges", "Amount": demand_charge})
+                
+                # Add other charges
+                for charge in other_charges_breakdown:
+                    bill_items.append(charge)
+                
+                # Add subtotal line
+                bill_items.append({"Description": "Subtotal", "Amount": subtotal})
+                
+                # Add taxes
+                for tax in tax_breakdown:
+                    bill_items.append({"Description": tax["Description"], "Amount": tax["Amount"]})
+                
+                # Add total line
+                bill_items.append({"Description": "Total", "Amount": total_bill})
+                
+                # Convert to dataframe and display
+                bill_df = pd.DataFrame(bill_items)
+                
+                if not bill_df.empty:
+                    # Format the Amount column with currency formatting
+                    bill_df["Amount"] = bill_df["Amount"].map("${:.2f}".format)
+                    
+                    # Display the dataframe without index
+                    st.table(bill_df)
+                else:
+                    st.warning("No charges found for this schedule.")
+            
+            # Display a note about the bill estimate
+            st.info("Note: This is an estimate based on the selected rate schedule and may not reflect all potential charges or adjustments.")
+            
+            # Export option
+            if st.button("Export Bill Estimate to CSV"):
+                csv = bill_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Download CSV",
+                    data=csv,
+                    file_name=f"{selected_utility}_{selected_schedule}_bill_estimate.csv",
+                    mime="text/csv"
+                )
+
+# Tab 2: Rate Comparison (placeholder for future implementation)
+with tab2:
+    st.header("Rate Schedule Comparison")
+    st.info("This feature will allow you to compare different rate schedules. Coming soon!")
+
+# Tab 3: Schedule Browser (placeholder for future implementation)
+with tab3:
+    st.header("Utility Rate Schedule Browser")
+    st.info("This feature will allow you to browse through rate schedules. Coming soon!")
