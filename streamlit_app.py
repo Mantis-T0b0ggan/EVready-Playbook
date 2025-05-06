@@ -321,126 +321,135 @@ with tab1:
                     energy_response = supabase.from_("Energy_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
                     
                     for rate in energy_response.data:
-                        rate_kwh = float(rate.get("RatekWh", 0))
-                        description = rate.get("Description", "Energy Charge")
-                        min_v = float(rate.get("MinkV", 0))
-                        max_v = rate.get("MaxkV")
-                        max_v = float(max_v) if max_v is not None else float('inf')
-                        determinant = rate.get("Determinant", "")
-                        
-                        # Check if usage falls within this rate's range
-                        if min_v <= usage_kwh <= max_v:
-                            charge_amount = rate_kwh * usage_kwh
-                            energy_charge += charge_amount
-                            energy_charges_breakdown.append({
-                                "Description": f"{description} ({rate_kwh:.4f} $/kWh)",
-                                "Amount": charge_amount
-                            })
+                        # Ensure all values are properly converted to float
+                        try:
+                            rate_kwh = float(rate.get("RatekWh", 0)) if rate.get("RatekWh") is not None else 0.0
+                            min_v = float(rate.get("MinkV", 0)) if rate.get("MinkV") is not None else 0.0
+                            max_v = float(rate.get("MaxkV")) if rate.get("MaxkV") is not None else float('inf')
+                            description = rate.get("Description", "Energy Charge")
+                            determinant = rate.get("Determinant", "")
+                            
+                            # Check if usage falls within this rate's range
+                            if min_v <= usage_kwh <= max_v:
+                                charge_amount = rate_kwh * usage_kwh
+                                energy_charge += charge_amount
+                                energy_charges_breakdown.append({
+                                    "Description": f"{description} ({rate_kwh:.4f} $/kWh)",
+                                    "Amount": charge_amount
+                                })
+                        except (ValueError, TypeError) as e:
+                            st.warning(f"Error processing energy rate: {str(e)}")
                     
                     # Check incremental/tiered energy rates (IncrementalEnergy_Table)
                     incremental_energy_response = supabase.from_("IncrementalEnergy_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
                     
                     if incremental_energy_response.data:
                         # Sort tiers by StartkWh to ensure proper order
-                        tiers = sorted(incremental_energy_response.data, key=lambda x: float(x.get("StartkWh", 0)))
-                        
-                        remaining_kwh = usage_kwh
-                        for tier in tiers:
-                            rate_kwh = float(tier.get("RatekWh", 0))
-                            start_kwh = float(tier.get("StartkWh", 0))
-                            end_kwh = tier.get("EndkWh")
-                            end_kwh = float(end_kwh) if end_kwh is not None else float('inf')
-                            description = tier.get("Description", "Tiered Energy Charge")
-                            season = tier.get("Season", "")
+                        try:
+                            tiers = sorted(incremental_energy_response.data, 
+                                          key=lambda x: float(x.get("StartkWh", 0)) if x.get("StartkWh") is not None else 0.0)
                             
-                            # Check if we're in the right season (if specified)
-                            if season and billing_month:
-                                # Simple season check - can be enhanced for more complex seasonal definitions
-                                summer_months = ["June", "July", "August", "September"]
-                                winter_months = ["December", "January", "February", "March"]
+                            remaining_kwh = usage_kwh
+                            for tier in tiers:
+                                rate_kwh = float(tier.get("RatekWh", 0)) if tier.get("RatekWh") is not None else 0.0
+                                start_kwh = float(tier.get("StartkWh", 0)) if tier.get("StartkWh") is not None else 0.0
+                                end_kwh = float(tier.get("EndkWh")) if tier.get("EndkWh") is not None else float('inf')
+                                description = tier.get("Description", "Tiered Energy Charge")
+                                season = tier.get("Season", "")
                                 
-                                if (season.lower() == "summer" and billing_month not in summer_months) or \
-                                   (season.lower() == "winter" and billing_month not in winter_months):
-                                    continue
-                            
-                            # Calculate tier usage and charge
-                            tier_usage = min(max(0, remaining_kwh - start_kwh), end_kwh - start_kwh)
-                            
-                            if tier_usage > 0:
-                                tier_charge = tier_usage * rate_kwh
-                                energy_charge += tier_charge
-                                energy_charges_breakdown.append({
-                                    "Description": f"{description} ({start_kwh}-{end_kwh if end_kwh != float('inf') else '∞'} kWh @ {rate_kwh:.4f} $/kWh)",
-                                    "Amount": tier_charge
-                                })
+                                # Check if we're in the right season (if specified)
+                                if season and billing_month:
+                                    # Simple season check - can be enhanced for more complex seasonal definitions
+                                    summer_months = ["June", "July", "August", "September"]
+                                    winter_months = ["December", "January", "February", "March"]
+                                    
+                                    if (season.lower() == "summer" and billing_month not in summer_months) or \
+                                       (season.lower() == "winter" and billing_month not in winter_months):
+                                        continue
                                 
-                                remaining_kwh -= tier_usage
-                                if remaining_kwh <= 0:
-                                    break
+                                # Calculate tier usage and charge
+                                tier_usage = min(max(0, remaining_kwh - start_kwh), end_kwh - start_kwh)
+                                
+                                if tier_usage > 0:
+                                    tier_charge = tier_usage * rate_kwh
+                                    energy_charge += tier_charge
+                                    energy_charges_breakdown.append({
+                                        "Description": f"{description} ({start_kwh}-{end_kwh if end_kwh != float('inf') else '∞'} kWh @ {rate_kwh:.4f} $/kWh)",
+                                        "Amount": tier_charge
+                                    })
+                                    
+                                    remaining_kwh -= tier_usage
+                                    if remaining_kwh <= 0:
+                                        break
+                        except (ValueError, TypeError) as e:
+                            st.warning(f"Error processing tiered energy rates: {str(e)}")
                     
                     # Check time-of-use energy rates (EnergyTime_Table)
                     energy_time_response = supabase.from_("EnergyTime_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
                     
                     if energy_time_response.data and len(energy_time_response.data) > 0:
-                        # If user specified TOU breakdown, use it
-                        if usage_by_tou:
-                            for period in energy_time_response.data:
-                                rate_kwh = float(period.get("RatekWh", 0))
-                                description = period.get("Description", "Time-of-Use Energy")
-                                time_of_day = period.get("TimeOfDay", "")
-                                season = period.get("Season", "")
-                                
-                                # Format period key to match usage_by_tou keys
-                                period_key = f"{description} ({time_of_day})"
-                                
-                                # Check if we're in the right season (if specified)
-                                if season and billing_month:
-                                    # Simple season check
-                                    summer_months = ["June", "July", "August", "September"]
-                                    winter_months = ["December", "January", "February", "March"]
+                        try:
+                            # If user specified TOU breakdown, use it
+                            if usage_by_tou:
+                                for period in energy_time_response.data:
+                                    rate_kwh = float(period.get("RatekWh", 0)) if period.get("RatekWh") is not None else 0.0
+                                    description = period.get("Description", "Time-of-Use Energy")
+                                    time_of_day = period.get("TimeOfDay", "")
+                                    season = period.get("Season", "")
                                     
-                                    if (season.lower() == "summer" and billing_month not in summer_months) or \
-                                       (season.lower() == "winter" and billing_month not in winter_months):
-                                        continue
+                                    # Format period key to match usage_by_tou keys
+                                    period_key = f"{description} ({time_of_day})"
+                                    
+                                    # Check if we're in the right season (if specified)
+                                    if season and billing_month:
+                                        # Simple season check
+                                        summer_months = ["June", "July", "August", "September"]
+                                        winter_months = ["December", "January", "February", "March"]
+                                        
+                                        if (season.lower() == "summer" and billing_month not in summer_months) or \
+                                           (season.lower() == "winter" and billing_month not in winter_months):
+                                            continue
+                                    
+                                    # Use the specified usage for this period if available
+                                    period_usage = usage_by_tou.get(period_key, 0)
+                                    
+                                    if period_usage > 0:
+                                        period_charge = rate_kwh * period_usage
+                                        energy_charge += period_charge
+                                        energy_charges_breakdown.append({
+                                            "Description": f"{description} ({time_of_day}, {rate_kwh:.4f} $/kWh)",
+                                            "Amount": period_charge
+                                        })
+                            else:
+                                # If no TOU breakdown provided, distribute usage evenly
+                                time_periods = energy_time_response.data
+                                num_periods = len(time_periods)
+                                usage_per_period = usage_kwh / num_periods if num_periods > 0 else 0
                                 
-                                # Use the specified usage for this period if available
-                                period_usage = usage_by_tou.get(period_key, 0)
-                                
-                                if period_usage > 0:
-                                    period_charge = rate_kwh * period_usage
+                                for period in time_periods:
+                                    rate_kwh = float(period.get("RatekWh", 0)) if period.get("RatekWh") is not None else 0.0
+                                    description = period.get("Description", "Time-of-Use Energy")
+                                    time_of_day = period.get("TimeOfDay", "")
+                                    season = period.get("Season", "")
+                                    
+                                    # Check if we're in the right season (if specified)
+                                    if season and billing_month:
+                                        # Simple season check
+                                        summer_months = ["June", "July", "August", "September"]
+                                        winter_months = ["December", "January", "February", "March"]
+                                        
+                                        if (season.lower() == "summer" and billing_month not in summer_months) or \
+                                           (season.lower() == "winter" and billing_month not in winter_months):
+                                            continue
+                                    
+                                    period_charge = rate_kwh * usage_per_period
                                     energy_charge += period_charge
                                     energy_charges_breakdown.append({
                                         "Description": f"{description} ({time_of_day}, {rate_kwh:.4f} $/kWh)",
                                         "Amount": period_charge
                                     })
-                        else:
-                            # If no TOU breakdown provided, distribute usage evenly
-                            time_periods = energy_time_response.data
-                            num_periods = len(time_periods)
-                            usage_per_period = usage_kwh / num_periods if num_periods > 0 else 0
-                            
-                            for period in time_periods:
-                                rate_kwh = float(period.get("RatekWh", 0))
-                                description = period.get("Description", "Time-of-Use Energy")
-                                time_of_day = period.get("TimeOfDay", "")
-                                season = period.get("Season", "")
-                                
-                                # Check if we're in the right season (if specified)
-                                if season and billing_month:
-                                    # Simple season check
-                                    summer_months = ["June", "July", "August", "September"]
-                                    winter_months = ["December", "January", "February", "March"]
-                                    
-                                    if (season.lower() == "summer" and billing_month not in summer_months) or \
-                                       (season.lower() == "winter" and billing_month not in winter_months):
-                                        continue
-                                
-                                period_charge = rate_kwh * usage_per_period
-                                energy_charge += period_charge
-                                energy_charges_breakdown.append({
-                                    "Description": f"{description} ({time_of_day}, {rate_kwh:.4f} $/kWh)",
-                                    "Amount": period_charge
-                                })
+                        except (ValueError, TypeError) as e:
+                            st.warning(f"Error processing time-of-use rates: {str(e)}")
                     
                 except Exception as e:
                     st.warning(f"Error calculating energy charges: {str(e)}")
@@ -455,100 +464,118 @@ with tab1:
                     demand_response = supabase.from_("Demand_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
                     
                     for rate in demand_response.data:
-                        rate_kw = float(rate.get("RatekW", 0))
-                        description = rate.get("Description", "Demand Charge")
-                        min_kv = float(rate.get("MinkV", 0))
-                        max_kv = rate.get("MaxkV")
-                        max_kv = float(max_kv) if max_kv is not None else float('inf')
-                        determinant = rate.get("Determinant", "")
-                        
-                        # Check if demand falls within this rate's range
-                        if min_kv <= demand_kw <= max_kv:
-                            charge_amount = rate_kw * demand_kw
-                            demand_charge += charge_amount
-                            demand_charges_breakdown.append({
-                                "Description": f"{description} ({rate_kw:.2f} $/kW)",
-                                "Amount": charge_amount
-                            })
+                        try:
+                            rate_kw = float(rate.get("RatekW", 0)) if rate.get("RatekW") is not None else 0.0
+                            min_kv = float(rate.get("MinkV", 0)) if rate.get("MinkV") is not None else 0.0
+                            max_kv = float(rate.get("MaxkV")) if rate.get("MaxkV") is not None else float('inf')
+                            description = rate.get("Description", "Demand Charge")
+                            determinant = rate.get("Determinant", "")
+                            
+                            # Check if demand falls within this rate's range
+                            if min_kv <= demand_kw <= max_kv:
+                                charge_amount = rate_kw * demand_kw
+                                demand_charge += charge_amount
+                                demand_charges_breakdown.append({
+                                    "Description": f"{description} ({rate_kw:.2f} $/kW)",
+                                    "Amount": charge_amount
+                                })
+                        except (ValueError, TypeError) as e:
+                            st.warning(f"Error processing demand rate: {str(e)}")
                     
                     # Check time-of-use demand rates (DemandTime_Table)
                     demand_time_response = supabase.from_("DemandTime_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
                     
                     if demand_time_response.data and len(demand_time_response.data) > 0:
-                        # For simplicity, we'll use the highest demand rate for now
-                        # In a real implementation, you'd need user input for demand during specific time periods
-                        
-                        highest_rate = max(demand_time_response.data, key=lambda x: float(x.get("RatekW", 0)))
-                        rate_kw = float(highest_rate.get("RatekW", 0))
-                        description = highest_rate.get("Description", "Time-of-Use Demand")
-                        time_of_day = highest_rate.get("TimeOfDay", "")
-                        season = highest_rate.get("Season", "")
-                        
-                        # Check if we're in the right season (if specified)
-                        if not season or not billing_month or \
-                           (season.lower() == "summer" and billing_month in ["June", "July", "August", "September"]) or \
-                           (season.lower() == "winter" and billing_month in ["December", "January", "February", "March"]):
+                        try:
+                            # For simplicity, we'll use the highest demand rate for now
+                            # In a real implementation, you'd need user input for demand during specific time periods
                             
-                            period_charge = rate_kw * demand_kw
-                            demand_charge += period_charge
-                            demand_charges_breakdown.append({
-                                "Description": f"{description} ({time_of_day}, {rate_kw:.2f} $/kW)",
-                                "Amount": period_charge
-                            })
+                            # Convert all RatekW values to floats, filtering out None values
+                            rates_kw = [float(rate.get("RatekW", 0)) if rate.get("RatekW") is not None else 0.0 
+                                       for rate in demand_time_response.data]
+                            
+                            if rates_kw:  # Check if the list is not empty
+                                highest_rate_kw = max(rates_kw)
+                                highest_rate_index = rates_kw.index(highest_rate_kw)
+                                highest_rate = demand_time_response.data[highest_rate_index]
+                                
+                                rate_kw = highest_rate_kw
+                                description = highest_rate.get("Description", "Time-of-Use Demand")
+                                time_of_day = highest_rate.get("TimeOfDay", "")
+                                season = highest_rate.get("Season", "")
+                                
+                                # Check if we're in the right season (if specified)
+                                if not season or not billing_month or \
+                                   (season.lower() == "summer" and billing_month in ["June", "July", "August", "September"]) or \
+                                   (season.lower() == "winter" and billing_month in ["December", "January", "February", "March"]):
+                                    
+                                    period_charge = rate_kw * demand_kw
+                                    demand_charge += period_charge
+                                    demand_charges_breakdown.append({
+                                        "Description": f"{description} ({time_of_day}, {rate_kw:.2f} $/kW)",
+                                        "Amount": period_charge
+                                    })
+                        except (ValueError, TypeError) as e:
+                            st.warning(f"Error processing time-of-use demand rates: {str(e)}")
                     
                     # Check incremental/tiered demand rates (IncrementalDemand_Table)
                     incremental_demand_response = supabase.from_("IncrementalDemand_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
                     
                     if incremental_demand_response.data:
-                        # Sort tiers by StepMin to ensure proper order
-                        tiers = sorted(incremental_demand_response.data, key=lambda x: float(x.get("StepMin", 0)))
-                        
-                        remaining_kw = demand_kw
-                        for tier in tiers:
-                            rate_kw = float(tier.get("RatekW", 0))
-                            step_min = float(tier.get("StepMin", 0))
-                            step_max = tier.get("StepMax")
-                            step_max = float(step_max) if step_max is not None else float('inf')
-                            description = tier.get("Description", "Tiered Demand Charge")
+                        try:
+                            # Sort tiers by StepMin to ensure proper order
+                            tiers = sorted(incremental_demand_response.data, 
+                                        key=lambda x: float(x.get("StepMin", 0)) if x.get("StepMin") is not None else 0.0)
                             
-                            # Calculate tier usage and charge
-                            tier_usage = min(max(0, remaining_kw - step_min), step_max - step_min)
-                            
-                            if tier_usage > 0:
-                                tier_charge = tier_usage * rate_kw
-                                demand_charge += tier_charge
-                                demand_charges_breakdown.append({
-                                    "Description": f"{description} ({step_min}-{step_max if step_max != float('inf') else '∞'} kW @ {rate_kw:.2f} $/kW)",
-                                    "Amount": tier_charge
-                                })
+                            remaining_kw = demand_kw
+                            for tier in tiers:
+                                rate_kw = float(tier.get("RatekW", 0)) if tier.get("RatekW") is not None else 0.0
+                                step_min = float(tier.get("StepMin", 0)) if tier.get("StepMin") is not None else 0.0
+                                step_max = float(tier.get("StepMax")) if tier.get("StepMax") is not None else float('inf')
+                                description = tier.get("Description", "Tiered Demand Charge")
                                 
-                                remaining_kw -= tier_usage
-                                if remaining_kw <= 0:
-                                    break
+                                # Calculate tier usage and charge
+                                tier_usage = min(max(0, remaining_kw - step_min), step_max - step_min)
+                                
+                                if tier_usage > 0:
+                                    tier_charge = tier_usage * rate_kw
+                                    demand_charge += tier_charge
+                                    demand_charges_breakdown.append({
+                                        "Description": f"{description} ({step_min}-{step_max if step_max != float('inf') else '∞'} kW @ {rate_kw:.2f} $/kW)",
+                                        "Amount": tier_charge
+                                    })
+                                    
+                                    remaining_kw -= tier_usage
+                                    if remaining_kw <= 0:
+                                        break
+                        except (ValueError, TypeError) as e:
+                            st.warning(f"Error processing tiered demand rates: {str(e)}")
                     
                     # Check reactive demand charges (ReactiveDemand_Table)
                     reactive_demand_response = supabase.from_("ReactiveDemand_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
                     
                     if reactive_demand_response.data and demand_kw > 0:
-                        # Calculate reactive demand based on power factor
-                        # Formula: reactive_power = active_power * tan(acos(power_factor))
-                        reactive_kvar = demand_kw * math.tan(math.acos(power_factor))
-                        
-                        for rate in reactive_demand_response.data:
-                            rate_value = float(rate.get("Rate", 0))
-                            min_val = float(rate.get("Min", 0))
-                            max_val = rate.get("Max")
-                            max_val = float(max_val) if max_val is not None else float('inf')
-                            description = rate.get("Description", "Reactive Demand Charge")
+                        try:
+                            # Calculate reactive demand based on power factor
+                            # Formula: reactive_power = active_power * tan(acos(power_factor))
+                            reactive_kvar = demand_kw * math.tan(math.acos(power_factor))
                             
-                            # Check if reactive demand falls within this rate's range
-                            if min_val <= reactive_kvar <= max_val:
-                                charge_amount = rate_value * reactive_kvar
-                                demand_charge += charge_amount
-                                demand_charges_breakdown.append({
-                                    "Description": f"{description} ({rate_value:.2f} $/kVAR, PF={power_factor:.2f})",
-                                    "Amount": charge_amount
-                                })
+                            for rate in reactive_demand_response.data:
+                                rate_value = float(rate.get("Rate", 0)) if rate.get("Rate") is not None else 0.0
+                                min_val = float(rate.get("Min", 0)) if rate.get("Min") is not None else 0.0
+                                max_val = float(rate.get("Max")) if rate.get("Max") is not None else float('inf')
+                                description = rate.get("Description", "Reactive Demand Charge")
+                                
+                                # Check if reactive demand falls within this rate's range
+                                if min_val <= reactive_kvar <= max_val:
+                                    charge_amount = rate_value * reactive_kvar
+                                    demand_charge += charge_amount
+                                    demand_charges_breakdown.append({
+                                        "Description": f"{description} ({rate_value:.2f} $/kVAR, PF={power_factor:.2f})",
+                                        "Amount": charge_amount
+                                    })
+                        except (ValueError, TypeError) as e:
+                            st.warning(f"Error processing reactive demand rates: {str(e)}")
                     
                 except Exception as e:
                     st.warning(f"Error calculating demand charges: {str(e)}")
