@@ -525,7 +525,7 @@ with tab2:
 # Tab 3: Schedule Browser (placeholder for future implementation)
 with tab3:
     st.header("Utility Rate Schedule Browser")
-    st.info("This feature will allow you to browse through rate schedules. Coming soon!"):
+    st.info("This feature will allow you to browse through rate schedules. Coming soon!")
                 st.warning(f"Error getting service charges: {str(e)}")
             
             # 2. Calculate energy charges
