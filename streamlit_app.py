@@ -1,4 +1,312 @@
-import os
+# 1. Get service charges
+            service_charge = 0.0
+            service_charge_breakdown = []
+            
+            try:
+                service_charge_response = supabase.from_("ServiceCharge_Table").select("Description, Rate, ChargeUnit").eq("ScheduleID", selected_schedule_id).execute()
+                
+                for charge in service_charge_response.data:
+                    rate = float(charge.get("Rate", 0))
+                    description = charge.get("Description", "Service Charge")
+                    unit = charge.get("ChargeUnit", "")
+                    
+                    service_charge += rate
+                    service_charge_breakdown.append({
+                        "Description": f"{description} ({unit})",
+                        "Amount": rate
+                    })
+            except Exception as e:
+                st.warning(f"Error getting service charges: {str(e)}")
+            
+            # 2. Calculate energy charges
+            energy_charge = 0.0
+            energy_charges_breakdown = []
+            
+            if has_energy_charges and usage_kwh:
+                try:
+                    # Check standard energy rates (Energy_Table)
+                    energy_response = supabase.from_("Energy_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
+                    
+                    for rate in energy_response.data:
+                        rate_kwh = float(rate.get("RatekWh", 0))
+                        description = rate.get("Description", "Energy Charge")
+                        min_v = float(rate.get("MinkV", 0))
+                        max_v = rate.get("MaxkV")
+                        max_v = float(max_v) if max_v is not None else float('inf')
+                        determinant = rate.get("Determinant", "")
+                        
+                        # Check if usage falls within this rate's range
+                        if min_v <= usage_kwh <= max_v:
+                            charge_amount = rate_kwh * usage_kwh
+                            energy_charge += charge_amount
+                            energy_charges_breakdown.append({
+                                "Description": f"{description} ({rate_kwh:.4f} $/kWh)",
+                                "Amount": charge_amount
+                            })
+                    
+                    # Check incremental/tiered energy rates (IncrementalEnergy_Table)
+                    incremental_energy_response = supabase.from_("IncrementalEnergy_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
+                    
+                    if incremental_energy_response.data:
+                        # Sort tiers by StartkWh to ensure proper order
+                        tiers = sorted(incremental_energy_response.data, key=lambda x: float(x.get("StartkWh", 0)))
+                        
+                        remaining_kwh = usage_kwh
+                        for tier in tiers:
+                            rate_kwh = float(tier.get("RatekWh", 0))
+                            start_kwh = float(tier.get("StartkWh", 0))
+                            end_kwh = tier.get("EndkWh")
+                            end_kwh = float(end_kwh) if end_kwh is not None else float('inf')
+                            description = tier.get("Description", "Tiered Energy Charge")
+                            season = tier.get("Season", "")
+                            
+                            # Check if we're in the right season (if specified)
+                            if season and billing_month:
+                                # Simple season check - can be enhanced for more complex seasonal definitions
+                                summer_months = ["June", "July", "August", "September"]
+                                winter_months = ["December", "January", "February", "March"]
+                                
+                                if (season.lower() == "summer" and billing_month not in summer_months) or \
+                                   (season.lower() == "winter" and billing_month not in winter_months):
+                                    continue
+                            
+                            # Calculate tier usage and charge
+                            tier_usage = min(max(0, remaining_kwh - start_kwh), end_kwh - start_kwh)
+                            
+                            if tier_usage > 0:
+                                tier_charge = tier_usage * rate_kwh
+                                energy_charge += tier_charge
+                                energy_charges_breakdown.append({
+                                    "Description": f"{description} ({start_kwh}-{end_kwh if end_kwh != float('inf') else '∞'} kWh @ {rate_kwh:.4f} $/kWh)",
+                                    "Amount": tier_charge
+                                })
+                                
+                                remaining_kwh -= tier_usage
+                                if remaining_kwh <= 0:
+                                    break
+                    
+                    # Check time-of-use energy rates (EnergyTime_Table)
+                    energy_time_response = supabase.from_("EnergyTime_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
+                    
+                    if energy_time_response.data and len(energy_time_response.data) > 0:
+                        # If user specified TOU breakdown, use it
+                        if usage_by_tou:
+                            for period in energy_time_response.data:
+                                rate_kwh = float(period.get("RatekWh", 0))
+                                description = period.get("Description", "Time-of-Use Energy")
+                                time_of_day = period.get("TimeOfDay", "")
+                                season = period.get("Season", "")
+                                
+                                # Format period key to match usage_by_tou keys
+                                period_key = f"{description} ({time_of_day})"
+                                
+                                # Check if we're in the right season (if specified)
+                                if season and billing_month:
+                                    # Simple season check
+                                    summer_months = ["June", "July", "August", "September"]
+                                    winter_months = ["December", "January", "February", "March"]
+                                    
+                                    if (season.lower() == "summer" and billing_month not in summer_months) or \
+                                       (season.lower() == "winter" and billing_month not in winter_months):
+                                        continue
+                                
+                                # Use the specified usage for this period if available
+                                period_usage = usage_by_tou.get(period_key, 0)
+                                
+                                if period_usage > 0:
+                                    period_charge = rate_kwh * period_usage
+                                    energy_charge += period_charge
+                                    energy_charges_breakdown.append({
+                                        "Description": f"{description} ({time_of_day}, {rate_kwh:.4f} $/kWh)",
+                                        "Amount": period_charge
+                                    })
+                        else:
+                            # If no TOU breakdown provided, distribute usage evenly
+                            time_periods = energy_time_response.data
+                            num_periods = len(time_periods)
+                            usage_per_period = usage_kwh / num_periods if num_periods > 0 else 0
+                            
+                            for period in time_periods:
+                                rate_kwh = float(period.get("RatekWh", 0))
+                                description = period.get("Description", "Time-of-Use Energy")
+                                time_of_day = period.get("TimeOfDay", "")
+                                season = period.get("Season", "")
+                                
+                                # Check if we're in the right season (if specified)
+                                if season and billing_month:
+                                    # Simple season check
+                                    summer_months = ["June", "July", "August", "September"]
+                                    winter_months = ["December", "January", "February", "March"]
+                                    
+                                    if (season.lower() == "summer" and billing_month not in summer_months) or \
+                                       (season.lower() == "winter" and billing_month not in winter_months):
+                                        continue
+                                
+                                period_charge = rate_kwh * usage_per_period
+                                energy_charge += period_charge
+                                energy_charges_breakdown.append({
+                                    "Description": f"{description} ({time_of_day}, {rate_kwh:.4f} $/kWh)",
+                                    "Amount": period_charge
+                                })
+                    
+                except Exception as e:
+                    st.warning(f"Error calculating energy charges: {str(e)}")
+            
+            # 3. Calculate demand charges
+            demand_charge = 0.0
+            demand_charges_breakdown = []
+            
+            if has_demand_charges and demand_kw:
+                try:
+                    # Check standard demand rates (Demand_Table)
+                    demand_response = supabase.from_("Demand_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
+                    
+                    for rate in demand_response.data:
+                        rate_kw = float(rate.get("RatekW", 0))
+                        description = rate.get("Description", "Demand Charge")
+                        min_kv = float(rate.get("MinkV", 0))
+                        max_kv = rate.get("MaxkV")
+                        max_kv = float(max_kv) if max_kv is not None else float('inf')
+                        determinant = rate.get("Determinant", "")
+                        
+                        # Check if demand falls within this rate's range
+                        if min_kv <= demand_kw <= max_kv:
+                            charge_amount = rate_kw * demand_kw
+                            demand_charge += charge_amount
+                            demand_charges_breakdown.append({
+                                "Description": f"{description} ({rate_kw:.2f} $/kW)",
+                                "Amount": charge_amount
+                            })
+                    
+                    # Check time-of-use demand rates (DemandTime_Table)
+                    demand_time_response = supabase.from_("DemandTime_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
+                    
+                    if demand_time_response.data and len(demand_time_response.data) > 0:
+                        # For simplicity, we'll use the highest demand rate for now
+                        # In a real implementation, you'd need user input for demand during specific time periods
+                        
+                        highest_rate = max(demand_time_response.data, key=lambda x: float(x.get("RatekW", 0)))
+                        rate_kw = float(highest_rate.get("RatekW", 0))
+                        description = highest_rate.get("Description", "Time-of-Use Demand")
+                        time_of_day = highest_rate.get("TimeOfDay", "")
+                        season = highest_rate.get("Season", "")
+                        
+                        # Check if we're in the right season (if specified)
+                        if not season or not billing_month or \
+                           (season.lower() == "summer" and billing_month in ["June", "July", "August", "September"]) or \
+                           (season.lower() == "winter" and billing_month in ["December", "January", "February", "March"]):
+                            
+                            period_charge = rate_kw * demand_kw
+                            demand_charge += period_charge
+                            demand_charges_breakdown.append({
+                                "Description": f"{description} ({time_of_day}, {rate_kw:.2f} $/kW)",
+                                "Amount": period_charge
+                            })
+                    
+                    # Check incremental/tiered demand rates (IncrementalDemand_Table)
+                    incremental_demand_response = supabase.from_("IncrementalDemand_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
+                    
+                    if incremental_demand_response.data:
+                        # Sort tiers by StepMin to ensure proper order
+                        tiers = sorted(incremental_demand_response.data, key=lambda x: float(x.get("StepMin", 0)))
+                        
+                        remaining_kw = demand_kw
+                        for tier in tiers:
+                            rate_kw = float(tier.get("RatekW", 0))
+                            step_min = float(tier.get("StepMin", 0))
+                            step_max = tier.get("StepMax")
+                            step_max = float(step_max) if step_max is not None else float('inf')
+                            description = tier.get("Description", "Tiered Demand Charge")
+                            
+                            # Calculate tier usage and charge
+                            tier_usage = min(max(0, remaining_kw - step_min), step_max - step_min)
+                            
+                            if tier_usage > 0:
+                                tier_charge = tier_usage * rate_kw
+                                demand_charge += tier_charge
+                                demand_charges_breakdown.append({
+                                    "Description": f"{description} ({step_min}-{step_max if step_max != float('inf') else '∞'} kW @ {rate_kw:.2f} $/kW)",
+                                    "Amount": tier_charge
+                                })
+                                
+                                remaining_kw -= tier_usage
+                                if remaining_kw <= 0:
+                                    break
+                    
+                    # Check reactive demand charges (ReactiveDemand_Table)
+                    reactive_demand_response = supabase.from_("ReactiveDemand_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
+                    
+                    if reactive_demand_response.data and demand_kw > 0:
+                        # Calculate reactive demand based on power factor
+                        # Formula: reactive_power = active_power * tan(acos(power_factor))
+                        reactive_kvar = demand_kw * math.tan(math.acos(power_factor))
+                        
+                        for rate in reactive_demand_response.data:
+                            rate_value = float(rate.get("Rate", 0))
+                            min_val = float(rate.get("Min", 0))
+                            max_val = rate.get("Max")
+                            max_val = float(max_val) if max_val is not None else float('inf')
+                            description = rate.get("Description", "Reactive Demand Charge")
+                            
+                            # Check if reactive demand falls within this rate's range
+                            if min_val <= reactive_kvar <= max_val:
+                                charge_amount = rate_value * reactive_kvar
+                                demand_charge += charge_amount
+                                demand_charges_breakdown.append({
+                                    "Description": f"{description} ({rate_value:.2f} $/kVAR, PF={power_factor:.2f})",
+                                    "Amount": charge_amount
+                                })
+                    
+                except Exception as e:
+                    st.warning(f"Error calculating demand charges: {str(e)}")
+            
+            # 4. Get other charges
+            other_charges = 0.0
+            other_charges_breakdown = []
+            
+            try:
+                other_charges_response = supabase.from_("OtherCharges_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
+                
+                for charge in other_charges_response.data:
+                    charge_type = float(charge.get("ChargeType", 0))
+                    description = charge.get("Description", "Other Charge")
+                    charge_unit = charge.get("ChargeUnit", "")
+                    
+                    other_charges += charge_type
+                    other_charges_breakdown.append({
+                        "Description": f"{description} ({charge_unit})",
+                        "Amount": charge_type
+                    })
+            except Exception as e:
+                st.warning(f"Error calculating other charges: {str(e)}")
+            
+            # 5. Calculate taxes
+            tax_amount = 0.0
+            subtotal = service_charge + energy_charge + demand_charge + other_charges
+            tax_breakdown = []
+            
+            try:
+                tax_response = supabase.from_("TaxInfo_Table").select("*").eq("ScheduleID", selected_schedule_id).execute()
+                
+                for tax in tax_response.data:
+                    tax_rate = float(tax.get("Per_cent", 0))
+                    tax_desc = tax.get("Type", "Tax")
+                    city = tax.get("City", "")
+                    basis = tax.get("Basis", "")
+                    
+                    # Add city info to description if available
+                    if city:
+                        tax_desc = f"{tax_desc} ({city})"
+                    
+                    # Calculate tax amount based on percentage
+                    amount = subtotal * (tax_rate / 100)
+                    tax_amount += amount
+                    tax_breakdown.append({
+                        "Description": f"{tax_desc} ({tax_rate}%)",
+                        "Amount": amount
+                    })
+            except Exception as e:
+                st.warning(f"Error calculating taxes: {str(e)}")import os
 import math
 import streamlit as st
 import pandas as pd
@@ -56,21 +364,19 @@ with tab1:
     # Step 1: State Selection
     # Get states that have utilities with schedules
     try:
-        # Query to get states that have utilities with schedules
-        states_query = """
-        SELECT DISTINCT u.State 
-        FROM Utility u
-        JOIN Schedule_Table s ON u.UtilityID = s.UtilityID
-        WHERE u.State IS NOT NULL AND u.State != ''
-        """
-        states_response = supabase.rpc('execute_sql', {'query': states_query}).execute()
+        # Get all utilities that have schedules
+        utilities_with_schedules = supabase.from_("Schedule_Table").select("UtilityID").execute()
+        utility_ids = [item['UtilityID'] for item in utilities_with_schedules.data]
         
-        if 'error' in states_response:
-            st.error(f"Error loading states: {states_response['error']}")
-            states = []
-        else:
+        # If there are utilities with schedules, get the states
+        if utility_ids:
+            states_response = supabase.from_("Utility").select("State").in_("UtilityID", utility_ids).execute()
+            states_data = states_response.data
+            
             # Extract unique states and sort them
-            states = sorted(list(set([state["state"] for state in states_response.data if state["state"]])))
+            states = sorted(list(set([state["State"] for state in states_data if state["State"]])))
+        else:
+            states = []
         
         if not states:
             st.warning("No states with utilities and rate schedules found in the database.")
@@ -87,26 +393,21 @@ with tab1:
     
     if selected_state:
         try:
-            # Query to get utilities in the selected state that have schedules
-            utilities_query = f"""
-            SELECT DISTINCT u.UtilityID, u.UtilityName 
-            FROM Utility u
-            JOIN Schedule_Table s ON u.UtilityID = s.UtilityID
-            WHERE u.State = '{selected_state}'
-            """
-            utilities_response = supabase.rpc('execute_sql', {'query': utilities_query}).execute()
+            # Get utilities in the selected state that have schedules
+            utilities_with_schedules = supabase.from_("Schedule_Table").select("UtilityID").execute()
+            utility_ids = [item['UtilityID'] for item in utilities_with_schedules.data]
             
-            if 'error' in utilities_response:
-                st.error(f"Error loading utilities: {utilities_response['error']}")
-                utilities_data = []
-            else:
+            if utility_ids:
+                utilities_response = supabase.from_("Utility").select("UtilityID, UtilityName").eq("State", selected_state).in_("UtilityID", utility_ids).execute()
                 utilities_data = utilities_response.data
+            else:
+                utilities_data = []
             
             if not utilities_data:
                 st.warning(f"No utilities with rate schedules found in {selected_state}.")
             else:
                 # Create a dictionary for easy lookup of UtilityID by name
-                utilities_dict = {utility["utilityname"]: utility["utilityid"] for utility in utilities_data}
+                utilities_dict = {utility["UtilityName"]: utility["UtilityID"] for utility in utilities_data}
                 utility_names = sorted(list(utilities_dict.keys()))
                 
                 selected_utility = st.selectbox("Select Utility", [""] + utility_names, index=0)
@@ -122,18 +423,8 @@ with tab1:
     
     if selected_utility_id:
         try:
-            schedules_query = f"""
-            SELECT ScheduleID, ScheduleName, ScheduleDescription 
-            FROM Schedule_Table 
-            WHERE UtilityID = {selected_utility_id}
-            """
-            schedules_response = supabase.rpc('execute_sql', {'query': schedules_query}).execute()
-            
-            if 'error' in schedules_response:
-                st.error(f"Error loading schedules: {schedules_response['error']}")
-                schedules_data = []
-            else:
-                schedules_data = schedules_response.data
+            schedules_response = supabase.from_("Schedule_Table").select("ScheduleID, ScheduleName, ScheduleDescription").eq("UtilityID", selected_utility_id).execute()
+            schedules_data = schedules_response.data
             
             if not schedules_data:
                 st.warning(f"No rate schedules found for {selected_utility}.")
@@ -141,8 +432,8 @@ with tab1:
                 # Format schedule options with name and description
                 schedule_options = {}
                 for schedule in schedules_data:
-                    name = schedule.get("schedulename", "")
-                    desc = schedule.get("scheduledescription", "")
+                    name = schedule.get("ScheduleName", "")
+                    desc = schedule.get("ScheduleDescription", "")
                     
                     # Create display text with both name and description
                     if desc:
@@ -150,7 +441,7 @@ with tab1:
                     else:
                         display_text = name
                     
-                    schedule_options[display_text] = schedule.get("scheduleid")
+                    schedule_options[display_text] = schedule.get("ScheduleID")
                 
                 schedule_display_options = sorted(list(schedule_options.keys()))
                 
@@ -172,69 +463,43 @@ with tab1:
     if selected_schedule_id:
         try:
             # Check if there are demand charges for this schedule
-            demand_query = f"""
-            SELECT COUNT(*) as count FROM Demand_Table WHERE ScheduleID = {selected_schedule_id}
-            """
-            demand_time_query = f"""
-            SELECT COUNT(*) as count FROM DemandTime_Table WHERE ScheduleID = {selected_schedule_id}
-            """
-            incremental_demand_query = f"""
-            SELECT COUNT(*) as count FROM IncrementalDemand_Table WHERE ScheduleID = {selected_schedule_id}
-            """
-            
-            demand_response = supabase.rpc('execute_sql', {'query': demand_query}).execute()
-            demand_time_response = supabase.rpc('execute_sql', {'query': demand_time_query}).execute()
-            incremental_demand_response = supabase.rpc('execute_sql', {'query': incremental_demand_query}).execute()
+            demand_response = supabase.from_("Demand_Table").select("id").eq("ScheduleID", selected_schedule_id).execute()
+            demand_time_response = supabase.from_("DemandTime_Table").select("id").eq("ScheduleID", selected_schedule_id).execute()
+            incremental_demand_response = supabase.from_("IncrementalDemand_Table").select("id").eq("ScheduleID", selected_schedule_id).execute()
             
             has_demand_charges = (
-                demand_response.data[0]["count"] > 0 or 
-                demand_time_response.data[0]["count"] > 0 or 
-                incremental_demand_response.data[0]["count"] > 0
+                len(demand_response.data) > 0 or 
+                len(demand_time_response.data) > 0 or 
+                len(incremental_demand_response.data) > 0
             )
             
             # Check if there are energy charges for this schedule
-            energy_query = f"""
-            SELECT COUNT(*) as count FROM Energy_Table WHERE ScheduleID = {selected_schedule_id}
-            """
-            energy_time_query = f"""
-            SELECT COUNT(*) as count FROM EnergyTime_Table WHERE ScheduleID = {selected_schedule_id}
-            """
-            incremental_energy_query = f"""
-            SELECT COUNT(*) as count FROM IncrementalEnergy_Table WHERE ScheduleID = {selected_schedule_id}
-            """
-            
-            energy_response = supabase.rpc('execute_sql', {'query': energy_query}).execute()
-            energy_time_response = supabase.rpc('execute_sql', {'query': energy_time_query}).execute()
-            incremental_energy_response = supabase.rpc('execute_sql', {'query': incremental_energy_query}).execute()
+            energy_response = supabase.from_("Energy_Table").select("id").eq("ScheduleID", selected_schedule_id).execute()
+            energy_time_response = supabase.from_("EnergyTime_Table").select("id").eq("ScheduleID", selected_schedule_id).execute()
+            incremental_energy_response = supabase.from_("IncrementalEnergy_Table").select("id").eq("ScheduleID", selected_schedule_id).execute()
             
             has_energy_charges = (
-                energy_response.data[0]["count"] > 0 or 
-                energy_time_response.data[0]["count"] > 0 or 
-                incremental_energy_response.data[0]["count"] > 0
+                len(energy_response.data) > 0 or 
+                len(energy_time_response.data) > 0 or 
+                len(incremental_energy_response.data) > 0
             )
             
             # Check for reactive demand charges
-            reactive_demand_query = f"""
-            SELECT COUNT(*) as count FROM ReactiveDemand_Table WHERE ScheduleID = {selected_schedule_id}
-            """
-            reactive_demand_response = supabase.rpc('execute_sql', {'query': reactive_demand_query}).execute()
-            has_reactive_demand = reactive_demand_response.data[0]["count"] > 0
+            reactive_demand_response = supabase.from_("ReactiveDemand_Table").select("id").eq("ScheduleID", selected_schedule_id).execute()
+            has_reactive_demand = len(reactive_demand_response.data) > 0
             
             # Check for time-of-use energy periods
-            if energy_time_response.data[0]["count"] > 0:
+            if len(energy_time_response.data) > 0:
                 has_tou_energy = True
-                tou_query = f"""
-                SELECT Description, TimeOfDay FROM EnergyTime_Table WHERE ScheduleID = {selected_schedule_id}
-                """
-                tou_response = supabase.rpc('execute_sql', {'query': tou_query}).execute()
+                tou_response = supabase.from_("EnergyTime_Table").select("Description, TimeOfDay").eq("ScheduleID", selected_schedule_id).execute()
                 
                 # Get unique TOU periods
                 tou_periods = []
                 seen_periods = set()
                 
                 for period in tou_response.data:
-                    description = period.get("description", "")
-                    time_of_day = period.get("timeofday", "")
+                    description = period.get("Description", "")
+                    time_of_day = period.get("TimeOfDay", "")
                     
                     period_key = f"{description} ({time_of_day})"
                     if period_key not in seen_periods:
