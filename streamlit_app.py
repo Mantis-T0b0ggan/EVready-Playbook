@@ -813,6 +813,7 @@ with tab3:
             except Exception as e:
                 st.warning
 
+
 # Tab 2: Rate Comparison (placeholder for future implementation)
 with tab2:
     st.header("Rate Schedule Comparison")
