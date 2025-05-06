@@ -525,7 +525,8 @@ with tab2:
 # Tab 3: Schedule Browser (placeholder for future implementation)
 with tab3:
     st.header("Utility Rate Schedule Browser")
-    st.info("This feature will allow you to browse through rate schedules. Coming soon!")(f"Error getting service charges: {str(e)}")
+    st.info("This feature will allow you to browse through rate schedules. Coming soon!"):
+                st.warning(f"Error getting service charges: {str(e)}")
             
             # 2. Calculate energy charges
             energy_charge = 0.0
@@ -810,16 +811,4 @@ with tab3:
                         "Description": f"{description} ({charge_unit})",
                         "Amount": charge_type
                     })
-            except Exception as e:
-                st.warning
-
-
-# Tab 2: Rate Comparison (placeholder for future implementation)
-with tab2:
-    st.header("Rate Schedule Comparison")
-    st.info("This feature will allow you to compare different rate schedules. Coming soon!")
-
-# Tab 3: Schedule Browser (placeholder for future implementation)
-with tab3:
-    st.header("Utility Rate Schedule Browser")
-    st.info("This feature will allow you to browse through rate schedules. Coming soon!")
+            except Exception as e
