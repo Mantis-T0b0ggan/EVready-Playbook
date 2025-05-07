@@ -731,7 +731,7 @@ def calculate_bill(supabase, schedule_id, schedule_name, usage_kwh, demand_kw, p
         "breakdown": breakdown  # Include breakdown data
     }
 
-# Function to create a comparison table using pandas DataFrame
+# IMPROVED: Function to create a comparison table using pandas DataFrame
 def create_comparison_dataframe(comparison_results):
     """Create a DataFrame for rate comparison."""
     
@@ -749,8 +749,10 @@ def create_comparison_dataframe(comparison_results):
     
     # Add data for each rate
     for i, result in enumerate(comparison_results):
-        option_name = f"Option {i+1} - Current Rate" if i == 0 else f"Option {i+1}"
-        schedule_name = result["schedule_name"].split(" - ")[0] if " - " in result["schedule_name"] else result["schedule_name"]
+        option_name = f"Option {i+1}" + (" - Current Rate" if i == 0 else "")
+        
+        # Use the full schedule name (includes description)
+        schedule_name = result["schedule_name"]
         
         data["Option"].append(option_name)
         data["Rate Name"].append(schedule_name)
@@ -762,7 +764,7 @@ def create_comparison_dataframe(comparison_results):
     
     return df, best_rate_id, projected_best
 
-# NEW FUNCTION: Create a horizontal bar chart for rate comparison
+# IMPROVED: Create a horizontal bar chart for rate comparison
 def create_comparison_visualization(comparison_results):
     """Create visual comparison of different rate schedules."""
     
@@ -789,40 +791,48 @@ def create_comparison_visualization(comparison_results):
     # Create DataFrame
     chart_df = pd.DataFrame(chart_data)
     
-    # Create horizontal bar chart
+    # Create horizontal bar chart with improved styling
     fig, ax = plt.subplots(figsize=(10, max(4, len(chart_data['Rate Name']) * 0.8)))
     
-    # Use different colors for current rate vs alternatives
+    # Use different colors for current rate vs alternatives 
     colors = ['#ff7f0e' if is_current else '#1f77b4' for is_current in chart_data['Is Current Rate']]
     
-    # Create horizontal bars
-    bars = ax.barh(chart_data['Rate Name'], chart_data['Monthly Cost ($)'], color=colors)
+    # Create horizontal bars with improved spacing
+    bars = ax.barh(chart_data['Rate Name'], chart_data['Monthly Cost ($)'], color=colors, height=0.5)
     
-    # Add data labels
+    # Add data labels with better positioning
     for bar in bars:
         width = bar.get_width()
         ax.text(width + 5, bar.get_y() + bar.get_height()/2, f'${width:.2f}',
-                ha='left', va='center', fontweight='bold')
+                ha='left', va='center', fontweight='bold', fontsize=11)
     
-    # Add a legend
+    # Add a legend with better positioning
     from matplotlib.patches import Patch
     legend_elements = [
         Patch(facecolor='#ff7f0e', label='Current Rate'),
         Patch(facecolor='#1f77b4', label='Alternative Rates')
     ]
-    ax.legend(handles=legend_elements, loc='upper right')
+    ax.legend(handles=legend_elements, loc='upper right', fontsize=10)
     
     # Customize appearance
-    ax.set_xlabel('Monthly Cost ($)')
-    ax.set_title('Rate Comparison')
+    ax.set_xlabel('Monthly Cost ($)', fontsize=12, fontweight='bold')
+    ax.set_title('Rate Comparison', fontsize=14, fontweight='bold')
     ax.grid(axis='x', linestyle='--', alpha=0.7)
+    ax.tick_params(axis='both', which='major', labelsize=10)
+    
+    # Set background color
+    ax.set_facecolor('#f5f5f5')
+    
+    # Remove top and right spines
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
     
     # Ensure left margin for labels
     plt.tight_layout()
     
     return fig
 
-# NEW FUNCTION: Create a stacked bar chart showing cost breakdown across rates
+# IMPROVED: Create a stacked bar chart showing cost breakdown across rates
 def create_cost_breakdown_comparison(comparison_results):
     """Create stacked bar chart showing cost breakdown across rate schedules."""
     
@@ -833,11 +843,13 @@ def create_cost_breakdown_comparison(comparison_results):
     demand_charges = []
     other_charges = []
     tax_amounts = []
+    totals = []
     
     for i, result in enumerate(comparison_results):
         # Extract name
         schedule_name = result["schedule_name"].split(" - ")[0] if " - " in result["schedule_name"] else result["schedule_name"]
         rate_names.append(schedule_name)
+        totals.append(result["total"])
         
         # Get detailed breakdown for this rate
         if "breakdown" in result:
@@ -855,8 +867,8 @@ def create_cost_breakdown_comparison(comparison_results):
             other_charges.append(0)
             tax_amounts.append(0)
     
-    # Create figure
-    fig, ax = plt.subplots(figsize=(12, max(6, len(rate_names) * 0.8)))
+    # Create figure with better styling
+    fig, ax = plt.subplots(figsize=(12, max(5, len(rate_names) * 0.8)))
     
     # Create stacked bars
     bar_width = 0.6
@@ -864,28 +876,51 @@ def create_cost_breakdown_comparison(comparison_results):
     # Bottom positions for stacking
     bottoms = np.zeros(len(rate_names))
     
-    # Plot each component
-    for data, label, color in [
-        (service_charges, 'Service Charges', '#1f77b4'),
-        (energy_charges, 'Energy Charges', '#ff7f0e'),
-        (demand_charges, 'Demand Charges', '#2ca02c'),
-        (other_charges, 'Other Charges', '#d62728'),
-        (tax_amounts, 'Taxes', '#9467bd')
-    ]:
-        # Only plot components that have non-zero values
-        if sum(data) > 0:
-            ax.barh(rate_names, data, bar_width, left=bottoms, label=label, color=color)
-            bottoms += np.array(data)
+    # Plot each component with improved colors
+    component_data = [
+        (service_charges, 'Service Charges', '#4878D0'),
+        (energy_charges, 'Energy Charges', '#EE854A'),
+        (demand_charges, 'Demand Charges', '#6ACC64'),
+        (other_charges, 'Other Charges', '#D65F5F'),
+        (tax_amounts, 'Taxes', '#956CB4')
+    ]
     
-    # Add total cost labels
-    for i, total in enumerate(bottoms):
-        ax.text(total + 5, i, f'Total: ${total:.2f}', va='center')
+    # Filter out components with all zeros
+    component_data = [(data, label, color) for data, label, color in component_data if sum(data) > 0]
+    
+    for data, label, color in component_data:
+        ax.barh(rate_names, data, bar_width, left=bottoms, label=label, color=color)
+        
+        # Add labels inside bars for significant components
+        for i, (value, bottom) in enumerate(zip(data, bottoms)):
+            if value > max(totals) * 0.05:  # Only label if component is at least 5% of max total
+                # Position the text in the middle of each segment
+                text_x = bottom + value/2
+                text_y = i
+                ax.text(text_x, text_y, f"${value:.0f}", 
+                        ha='center', va='center', 
+                        color='white', fontweight='bold',
+                        fontsize=9)
+            
+        bottoms += np.array(data)
+    
+    # Add total cost labels at the end of each bar
+    for i, total in enumerate(totals):
+        ax.text(total + 50, i, f'Total: ${total:.2f}', va='center', fontweight='bold', fontsize=10)
     
     # Customize appearance
-    ax.set_xlabel('Cost ($)')
-    ax.set_title('Cost Breakdown Comparison')
-    ax.legend(loc='upper right')
+    ax.set_xlabel('Cost ($)', fontsize=12, fontweight='bold')
+    ax.set_title('Cost Breakdown Comparison', fontsize=14, fontweight='bold')
+    ax.legend(loc='upper right', fontsize=10)
     ax.grid(axis='x', linestyle='--', alpha=0.4)
+    ax.tick_params(axis='both', which='major', labelsize=10)
+    
+    # Set background color
+    ax.set_facecolor('#f5f5f5')
+    
+    # Remove top and right spines
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
     
     plt.tight_layout()
     
@@ -1282,7 +1317,7 @@ with tab1:
                 if has_energy_charges or has_demand_charges:
                     st.markdown("### Bill Visualization")
                     
-# Prepare data for pie chart
+                    # Prepare data for pie chart
                     chart_data = {
                         'Category': [],
                         'Amount': []
@@ -1316,10 +1351,32 @@ with tab1:
                     # Create DataFrame
                     chart_df = pd.DataFrame(chart_data)
                     
-                    # Create pie chart
+                    # Create pie chart with improved styling
                     fig, ax = plt.subplots(figsize=(4, 4))
-                    ax.pie(chart_df['Amount'], labels=chart_df['Category'], autopct='%1.1f%%')
-                    ax.set_title('Bill Composition')
+                    
+                    # Use better colors
+                    colors = ['#4878D0', '#EE854A', '#6ACC64', '#D65F5F', '#956CB4']
+                    
+                    # Create pie chart with better styling
+                    wedges, texts, autotexts = ax.pie(
+                        chart_df['Amount'], 
+                        labels=chart_df['Category'], 
+                        autopct='%1.1f%%',
+                        colors=colors,
+                        shadow=False,
+                        startangle=90,
+                        wedgeprops={'edgecolor': 'w', 'linewidth': 1}
+                    )
+                    
+                    # Style the percentage text
+                    for autotext in autotexts:
+                        autotext.set_color('white')
+                        autotext.set_fontweight('bold')
+                    
+                    ax.set_title('Bill Composition', fontsize=14, fontweight='bold')
+                    ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
+                    
+                    plt.tight_layout()
                     st.pyplot(fig)
             
             with col2:
@@ -1384,64 +1441,75 @@ with tab1:
                         compare_pressed = st.button("Compare Rates", key="compare_rates_tab1")  # Added unique key
                     
                     if selected_comparison_schedules and (compare_pressed or 'comparison_results' in st.session_state and st.session_state.comparison_results):
-                        st.markdown("### Rate Comparison Results")
-                        
-                        try:
-                            if compare_pressed or not st.session_state.comparison_results:  # Only recalculate if the button was just pressed
-                                comparison_results = [st.session_state.current_bill]
-                                
-                                # Calculate bills for each selected comparison schedule
-                                for schedule_display in selected_comparison_schedules:
-                                    comp_schedule_id = other_schedule_options[schedule_display]
+                        # Start a spinner for better user experience
+                        with st.spinner("Calculating rate comparisons..."):
+                            try:
+                                if compare_pressed or not st.session_state.comparison_results:  # Only recalculate if the button was just pressed
+                                    comparison_results = [st.session_state.current_bill]
                                     
-                                    # Calculate bill using the same usage values but different schedule
-                                    comp_bill = calculate_bill(
-                                        supabase=supabase,
-                                        schedule_id=comp_schedule_id,
-                                        schedule_name=schedule_display,
-                                        usage_kwh=usage_kwh,
-                                        demand_kw=demand_kw,
-                                        power_factor=power_factor,
-                                        billing_month=billing_month
-                                    )
+                                    # Calculate bills for each selected comparison schedule
+                                    for schedule_display in selected_comparison_schedules:
+                                        comp_schedule_id = other_schedule_options[schedule_display]
+                                        
+                                        # Calculate bill using the same usage values but different schedule
+                                        comp_bill = calculate_bill(
+                                            supabase=supabase,
+                                            schedule_id=comp_schedule_id,
+                                            schedule_name=schedule_display,
+                                            usage_kwh=usage_kwh,
+                                            demand_kw=demand_kw,
+                                            power_factor=power_factor,
+                                            billing_month=billing_month
+                                        )
+                                        
+                                        comparison_results.append(comp_bill)
                                     
-                                    comparison_results.append(comp_bill)
+                                    # Store the comparison results in session state
+                                    st.session_state.comparison_results = comparison_results
                                 
-                                # Store the comparison results in session state
-                                st.session_state.comparison_results = comparison_results
-                            
-                            # Create a comparison table using pandas DataFrame
-                            comparison_df, best_rate_id, projected_best = create_comparison_dataframe(st.session_state.comparison_results)
-                            
-                            # Display the comparison table
-                            st.dataframe(comparison_df, use_container_width=True)
-                            
-                            # NEW CODE: Add horizontal bar chart comparison
-                            st.subheader("Visual Rate Comparison")
-                            comparison_chart = create_comparison_visualization(st.session_state.comparison_results)
-                            st.pyplot(comparison_chart)
-                            
-                            # NEW CODE: Add cost breakdown stacked bar chart
-                            st.subheader("Cost Breakdown Comparison")
-                            breakdown_chart = create_cost_breakdown_comparison(st.session_state.comparison_results)
-                            st.pyplot(breakdown_chart)
-                            
-                            # Add some analysis
-                            best_option = min(st.session_state.comparison_results, key=lambda x: x["total"])
-                            savings = st.session_state.current_bill["total"] - best_option["total"]
-                            
-                            if savings > 0 and best_option["schedule_id"] != st.session_state.current_bill["schedule_id"]:
-                                st.success(f"**Potential Savings**: Switching to '{best_option['schedule_name']}' could save approximately ${savings:.2f} per month based on your current usage.")
+                                # Create a comparison table using pandas DataFrame
+                                comparison_df, best_rate_id, projected_best = create_comparison_dataframe(st.session_state.comparison_results)
                                 
-                                # Calculate annual savings
-                                annual_savings = savings * 12
-                                st.success(f"**Annual Savings**: This amounts to approximately ${annual_savings:.2f} per year.")
-                            else:
-                                st.success(f"**Current Rate Optimal**: Your current rate '{st.session_state.current_bill['schedule_name']}' appears to be the most cost-effective option based on your usage pattern.")
-                        
-                        except Exception as e:
-                            st.error(f"Error during comparison calculation: {str(e)}")
-                            st.info("Try selecting your schedules again or use the Reset All button at the top to start fresh.")
+                                # Display the comparison table
+                                st.subheader("Rate Comparison Table")
+                                st.dataframe(comparison_df, use_container_width=True)
+                                
+                                # Add a container for the visual comparisons
+                                with st.container():
+                                    st.subheader("Visual Rate Comparison")
+                                    st.caption("Monthly cost comparison between your current rate and alternatives")
+                                    
+                                    # Basic bar chart for rate comparison
+                                    comparison_chart = create_comparison_visualization(st.session_state.comparison_results)
+                                    st.pyplot(comparison_chart)
+                                
+                                # Add a container for the cost breakdown
+                                with st.container():
+                                    st.subheader("Cost Breakdown Comparison")
+                                    st.caption("See how different components contribute to your total bill")
+                                    
+                                    # Show cost breakdown comparison
+                                    breakdown_chart = create_cost_breakdown_comparison(st.session_state.comparison_results)
+                                    st.pyplot(breakdown_chart)
+                                
+                                # Add analysis text with better formatting
+                                st.markdown("---")
+                                best_option = min(st.session_state.comparison_results, key=lambda x: x["total"])
+                                savings = st.session_state.current_bill["total"] - best_option["total"]
+                                
+                                if savings > 0 and best_option["schedule_id"] != st.session_state.current_bill["schedule_id"]:
+                                    st.success(f"**Potential Savings**: Switching to '{best_option['schedule_name'].split(' - ')[0]}' could save approximately ${savings:.2f} per month based on your current usage.")
+                                    
+                                    # Calculate annual savings
+                                    annual_savings = savings * 12
+                                    st.success(f"**Annual Savings**: This amounts to approximately ${annual_savings:.2f} per year.")
+                                else:
+                                    best_name = st.session_state.current_bill["schedule_name"]
+                                    st.success(f"**Current Rate Optimal**: Your current rate '{best_name}' appears to be the most cost-effective option based on your usage pattern.")
+                            
+                            except Exception as e:
+                                st.error(f"Error during comparison calculation: {str(e)}")
+                                st.info("Try selecting your schedules again or use the Reset All button at the top to start fresh.")
             
             except Exception as e:
                 st.error(f"Error loading comparison schedules: {str(e)}")
