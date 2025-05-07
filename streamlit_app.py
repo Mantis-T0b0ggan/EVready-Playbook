@@ -3,6 +3,7 @@ import math
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
@@ -93,6 +94,10 @@ if 'comparison_results' not in st.session_state:
     st.session_state.comparison_results = []
 if 'bill_df' not in st.session_state:
     st.session_state.bill_df = None
+if 'bill_breakdown' not in st.session_state:
+    st.session_state.bill_breakdown = {}
+if 'comparison_breakdowns' not in st.session_state:
+    st.session_state.comparison_breakdowns = []
 
 # Create tabs for different functionalities
 tab1, tab2 = st.tabs(["Bill Estimation & Comparison", "Schedule Browser"])
@@ -486,8 +491,18 @@ def calculate_current_bill(supabase, schedule_id, schedule_name, usage_kwh, usag
     # Convert to dataframe
     bill_df = pd.DataFrame(bill_items)
     
+    # Save bill breakdown for visualization purposes
+    bill_breakdown = {
+        'service_charge': service_charge,
+        'energy_charge': energy_charge,
+        'demand_charge': demand_charge,
+        'other_charges': other_charges,
+        'tax_amount': tax_amount,
+        'total': total_bill
+    }
+    
     # Return all the calculated values
-    return service_charge, energy_charge, demand_charge, other_charges, tax_amount, total_bill, bill_df
+    return service_charge, energy_charge, demand_charge, other_charges, tax_amount, total_bill, bill_df, bill_breakdown
 
 # Define the calculate_bill function for comparing different schedules
 def calculate_bill(supabase, schedule_id, schedule_name, usage_kwh, demand_kw, power_factor, billing_month):
@@ -495,9 +510,15 @@ def calculate_bill(supabase, schedule_id, schedule_name, usage_kwh, demand_kw, p
     
     total_bill = 0.0
     
+    # Initialize breakdown components
+    service_charge = 0.0
+    energy_charge = 0.0
+    demand_charge = 0.0
+    other_charges = 0.0
+    tax_amount = 0.0
+    
     try:
         # 1. Get service charges
-        service_charge = 0.0
         service_charge_response = supabase.from_("ServiceCharge_Table").select("Rate").eq("ScheduleID", schedule_id).execute()
         for charge in service_charge_response.data:
             try:
@@ -507,8 +528,6 @@ def calculate_bill(supabase, schedule_id, schedule_name, usage_kwh, demand_kw, p
                 pass
         
         # 2. Calculate energy charges
-        energy_charge = 0.0
-        
         if usage_kwh:
             # Check standard energy rates (Energy_Table)
             energy_response = supabase.from_("Energy_Table").select("*").eq("ScheduleID", schedule_id).execute()
@@ -585,8 +604,6 @@ def calculate_bill(supabase, schedule_id, schedule_name, usage_kwh, demand_kw, p
                     pass
         
         # 3. Calculate demand charges
-        demand_charge = 0.0
-        
         if demand_kw:
             # Check standard demand rates
             demand_response = supabase.from_("Demand_Table").select("*").eq("ScheduleID", schedule_id).execute()
@@ -670,7 +687,6 @@ def calculate_bill(supabase, schedule_id, schedule_name, usage_kwh, demand_kw, p
                         pass
         
         # 4. Get other charges
-        other_charges = 0.0
         other_charges_response = supabase.from_("OtherCharges_Table").select("ChargeType").eq("ScheduleID", schedule_id).execute()
         for charge in other_charges_response.data:
             try:
@@ -681,7 +697,6 @@ def calculate_bill(supabase, schedule_id, schedule_name, usage_kwh, demand_kw, p
         
         # 5. Calculate taxes
         subtotal = service_charge + energy_charge + demand_charge + other_charges
-        tax_amount = 0.0
         
         tax_response = supabase.from_("TaxInfo_Table").select("Per_cent").eq("ScheduleID", schedule_id).execute()
         for tax in tax_response.data:
@@ -697,12 +712,23 @@ def calculate_bill(supabase, schedule_id, schedule_name, usage_kwh, demand_kw, p
     except Exception as e:
         st.warning(f"Error calculating bill for schedule {schedule_id}: {str(e)}")
     
+    # Create breakdown dictionary for visualization
+    breakdown = {
+        'service_charge': service_charge,
+        'energy_charge': energy_charge,
+        'demand_charge': demand_charge,
+        'other_charges': other_charges,
+        'tax_amount': tax_amount,
+        'total': total_bill
+    }
+    
     # Return the bill results
     return {
         "schedule_id": schedule_id,
         "schedule_name": schedule_name,
         "total": total_bill,
-        "projected": total_bill * 1.02  # Simple 2% projection for example purposes
+        "projected": total_bill * 1.02,  # Simple 2% projection for example purposes
+        "breakdown": breakdown  # Include breakdown data
     }
 
 # Function to create a comparison table using pandas DataFrame
@@ -735,6 +761,135 @@ def create_comparison_dataframe(comparison_results):
     df = pd.DataFrame(data)
     
     return df, best_rate_id, projected_best
+
+# NEW FUNCTION: Create a horizontal bar chart for rate comparison
+def create_comparison_visualization(comparison_results):
+    """Create visual comparison of different rate schedules."""
+    
+    # Sort results by total cost (ascending)
+    sorted_results = sorted(comparison_results, key=lambda x: x["total"])
+    
+    # Prepare data for chart
+    chart_data = {
+        'Rate Name': [],
+        'Monthly Cost ($)': [],
+        'Is Current Rate': []
+    }
+    
+    current_rate_id = comparison_results[0]["schedule_id"]
+    
+    for result in sorted_results:
+        # Extract the short name (without description)
+        schedule_name = result["schedule_name"].split(" - ")[0] if " - " in result["schedule_name"] else result["schedule_name"]
+        
+        chart_data['Rate Name'].append(schedule_name)
+        chart_data['Monthly Cost ($)'].append(result['total'])
+        chart_data['Is Current Rate'].append(result['schedule_id'] == current_rate_id)
+    
+    # Create DataFrame
+    chart_df = pd.DataFrame(chart_data)
+    
+    # Create horizontal bar chart
+    fig, ax = plt.subplots(figsize=(10, max(4, len(chart_data['Rate Name']) * 0.8)))
+    
+    # Use different colors for current rate vs alternatives
+    colors = ['#ff7f0e' if is_current else '#1f77b4' for is_current in chart_data['Is Current Rate']]
+    
+    # Create horizontal bars
+    bars = ax.barh(chart_data['Rate Name'], chart_data['Monthly Cost ($)'], color=colors)
+    
+    # Add data labels
+    for bar in bars:
+        width = bar.get_width()
+        ax.text(width + 5, bar.get_y() + bar.get_height()/2, f'${width:.2f}',
+                ha='left', va='center', fontweight='bold')
+    
+    # Add a legend
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor='#ff7f0e', label='Current Rate'),
+        Patch(facecolor='#1f77b4', label='Alternative Rates')
+    ]
+    ax.legend(handles=legend_elements, loc='upper right')
+    
+    # Customize appearance
+    ax.set_xlabel('Monthly Cost ($)')
+    ax.set_title('Rate Comparison')
+    ax.grid(axis='x', linestyle='--', alpha=0.7)
+    
+    # Ensure left margin for labels
+    plt.tight_layout()
+    
+    return fig
+
+# NEW FUNCTION: Create a stacked bar chart showing cost breakdown across rates
+def create_cost_breakdown_comparison(comparison_results):
+    """Create stacked bar chart showing cost breakdown across rate schedules."""
+    
+    # Prepare data structure
+    rate_names = []
+    service_charges = []
+    energy_charges = []
+    demand_charges = []
+    other_charges = []
+    tax_amounts = []
+    
+    for i, result in enumerate(comparison_results):
+        # Extract name
+        schedule_name = result["schedule_name"].split(" - ")[0] if " - " in result["schedule_name"] else result["schedule_name"]
+        rate_names.append(schedule_name)
+        
+        # Get detailed breakdown for this rate
+        if "breakdown" in result:
+            breakdown = result["breakdown"]
+            service_charges.append(breakdown.get('service_charge', 0))
+            energy_charges.append(breakdown.get('energy_charge', 0))
+            demand_charges.append(breakdown.get('demand_charge', 0))
+            other_charges.append(breakdown.get('other_charges', 0))
+            tax_amounts.append(breakdown.get('tax_amount', 0))
+        else:
+            # Fallback if detailed breakdown not available
+            service_charges.append(0)
+            energy_charges.append(0)
+            demand_charges.append(0)
+            other_charges.append(0)
+            tax_amounts.append(0)
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(12, max(6, len(rate_names) * 0.8)))
+    
+    # Create stacked bars
+    bar_width = 0.6
+    
+    # Bottom positions for stacking
+    bottoms = np.zeros(len(rate_names))
+    
+    # Plot each component
+    for data, label, color in [
+        (service_charges, 'Service Charges', '#1f77b4'),
+        (energy_charges, 'Energy Charges', '#ff7f0e'),
+        (demand_charges, 'Demand Charges', '#2ca02c'),
+        (other_charges, 'Other Charges', '#d62728'),
+        (tax_amounts, 'Taxes', '#9467bd')
+    ]:
+        # Only plot components that have non-zero values
+        if sum(data) > 0:
+            ax.barh(rate_names, data, bar_width, left=bottoms, label=label, color=color)
+            bottoms += np.array(data)
+    
+    # Add total cost labels
+    for i, total in enumerate(bottoms):
+        ax.text(total + 5, i, f'Total: ${total:.2f}', va='center')
+    
+    # Customize appearance
+    ax.set_xlabel('Cost ($)')
+    ax.set_title('Cost Breakdown Comparison')
+    ax.legend(loc='upper right')
+    ax.grid(axis='x', linestyle='--', alpha=0.4)
+    
+    plt.tight_layout()
+    
+    return fig
 
 # Tab 1: Bill Estimation Tool
 with tab1:
@@ -1063,7 +1218,7 @@ with tab1:
                 
                 # Calculate the bill for the selected schedule
                 try:
-                    service_charge, energy_charge, demand_charge, other_charges, tax_amount, total_bill, bill_df = calculate_current_bill(
+                    service_charge, energy_charge, demand_charge, other_charges, tax_amount, total_bill, bill_df, bill_breakdown = calculate_current_bill(
                         supabase, 
                         selected_schedule_id, 
                         selected_schedule, 
@@ -1085,13 +1240,15 @@ with tab1:
                     st.session_state.tax_amount = tax_amount
                     st.session_state.total_bill = total_bill
                     st.session_state.bill_df = bill_df
+                    st.session_state.bill_breakdown = bill_breakdown
                     
                     # Store the current bill details for comparison
                     st.session_state.current_bill = {
                         "schedule_id": selected_schedule_id,
                         "schedule_name": selected_schedule,
                         "total": total_bill,
-                        "projected": total_bill * 1.02  # Simple 2% projection for example purposes
+                        "projected": total_bill * 1.02,  # Simple 2% projection for example purposes
+                        "breakdown": bill_breakdown  # Store the breakdown for visualization
                     }
                     
                     # Clear previous comparison results when recalculating
@@ -1125,7 +1282,7 @@ with tab1:
                 if has_energy_charges or has_demand_charges:
                     st.markdown("### Bill Visualization")
                     
-                    # Prepare data for pie chart
+# Prepare data for pie chart
                     chart_data = {
                         'Category': [],
                         'Amount': []
@@ -1259,12 +1416,26 @@ with tab1:
                             # Display the comparison table
                             st.dataframe(comparison_df, use_container_width=True)
                             
+                            # NEW CODE: Add horizontal bar chart comparison
+                            st.subheader("Visual Rate Comparison")
+                            comparison_chart = create_comparison_visualization(st.session_state.comparison_results)
+                            st.pyplot(comparison_chart)
+                            
+                            # NEW CODE: Add cost breakdown stacked bar chart
+                            st.subheader("Cost Breakdown Comparison")
+                            breakdown_chart = create_cost_breakdown_comparison(st.session_state.comparison_results)
+                            st.pyplot(breakdown_chart)
+                            
                             # Add some analysis
                             best_option = min(st.session_state.comparison_results, key=lambda x: x["total"])
                             savings = st.session_state.current_bill["total"] - best_option["total"]
                             
                             if savings > 0 and best_option["schedule_id"] != st.session_state.current_bill["schedule_id"]:
                                 st.success(f"**Potential Savings**: Switching to '{best_option['schedule_name']}' could save approximately ${savings:.2f} per month based on your current usage.")
+                                
+                                # Calculate annual savings
+                                annual_savings = savings * 12
+                                st.success(f"**Annual Savings**: This amounts to approximately ${annual_savings:.2f} per year.")
                             else:
                                 st.success(f"**Current Rate Optimal**: Your current rate '{st.session_state.current_bill['schedule_name']}' appears to be the most cost-effective option based on your usage pattern.")
                         
