@@ -2028,3 +2028,27 @@ with tab2:
     selected_utility_id = None
     
     if selected_state:
+        try:
+            # Get utilities in the selected state that have schedules
+            utilities_with_schedules = supabase.from_("Schedule_Table").select("UtilityID").execute()
+            utility_ids = [item['UtilityID'] for item in utilities_with_schedules.data]
+            
+            if utility_ids:
+                utilities_response = supabase.from_("Utility").select("UtilityID, UtilityName").eq("State", selected_state).in_("UtilityID", utility_ids).execute()
+                utilities_data = utilities_response.data
+            else:
+                utilities_data = []
+            
+            if not utilities_data:
+                st.warning(f"No utilities with rate schedules found in {selected_state}.")
+            else:
+                # Create a dictionary for easy lookup of UtilityID by name
+                utilities_dict = {utility["UtilityName"]: utility["UtilityID"] for utility in utilities_data}
+                utility_names = sorted(list(utilities_dict.keys()))
+                
+                selected_utility = st.selectbox("Select Utility", [""] + utility_names, index=0)
+                
+                if selected_utility:
+                    selected_utility_id = utilities_dict[selected_utility]
+        except Exception as e:
+            st.error(f"Error loading utilities: {str(e)}")
