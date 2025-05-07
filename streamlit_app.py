@@ -692,7 +692,7 @@ except Exception as e:
     st.stop()
 
 # Main app title with logo
-col_logo, col_title = st.columns([1, 5])
+col_logo, col_title = st.columns([2, 4])  # Changed ratio to give more space to logo
 with col_logo:
     try:
         # First attempt to load the logo as PDF
@@ -705,12 +705,12 @@ with col_logo:
         # Get the first page
         first_page = pdf_document[0]
         # Render page to an image with higher resolution
-        pix = first_page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        pix = first_page.get_pixmap(matrix=fitz.Matrix(3, 3))  # Increased resolution
         # Convert to PIL Image
         img = Image.open(io.BytesIO(pix.tobytes()))
         
-        # Display the converted image
-        st.image(img, width=150)
+        # Display the converted image with increased width
+        st.image(img, width=200)  # Increased from 150 to 200
         
     except Exception as e:
         # If PDF conversion fails, try to find PNG/JPG versions
@@ -718,7 +718,7 @@ with col_logo:
             # Try common image formats
             for ext in ["png", "jpg", "jpeg"]:
                 try:
-                    st.image(f"logo.{ext}", width=150)
+                    st.image(f"logo.{ext}", width=200)  # Increased from 150 to 200
                     break
                 except:
                     continue
@@ -727,7 +727,7 @@ with col_logo:
             st.warning("Note: Company logo could not be loaded. Please ensure logo.png, logo.jpg, or logo.pdf exists in the app directory.")
 
 with col_title:
-    st.title("⚡ Utility Rate Analysis Tool")
+    st.title("Utility Rate Analysis Tool")  # Removed the lightning emoji
 
 # Add reset button at the top of the app
 col1, col2 = st.columns([6, 1])
