@@ -7,6 +7,85 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
+# Configure page settings first (must be the first Streamlit command)
+st.set_page_config(
+    page_title="EVready Playbook",
+    page_icon="⚡",
+    layout="wide", 
+    initial_sidebar_state="expanded"
+)
+
+# Load environment variables from .env file if it exists (for local development)
+# Otherwise, rely on environment variables set in the deployment platform
+load_dotenv()
+
+# Try to get credentials from Streamlit secrets first, then fall back to environment variables
+try:
+    SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+except Exception:
+    # Fall back to environment variables
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+# Verify credentials and initialize Supabase client
+if not SUPABASE_URL or not SUPABASE_KEY:
+    st.error("⚠️ Supabase credentials not found. Please check your environment variables or Streamlit secrets.")
+    st.info("This app requires Supabase credentials to function. Please set up your credentials and try again.")
+    st.stop()  # This will prevent the rest of the app from running
+
+try:
+    # Initialize Supabase client with error handling
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception as e:
+    st.error(f"⚠️ Failed to connect to Supabase: {str(e)}")
+    st.info("Please check your credentials and make sure your Supabase project is running.")
+    st.stop()
+
+# Main app title with logo - centered above the title
+st.markdown(
+    """
+    <div style='display: flex; justify-content: center; margin-bottom: 1rem;'>
+        <div style='width: 300px; text-align: center;'>
+    """, 
+    unsafe_allow_html=True
+)
+
+# Display logo image
+try:
+    # Display logo with increased width
+    st.image("logo.png", width=300)
+except Exception as e:
+    # If loading fails, show warning
+    st.warning("Note: Company logo could not be loaded. Please ensure logo.png exists in the app directory.")
+
+st.markdown("</div></div>", unsafe_allow_html=True)
+
+# Title centered on the page
+st.markdown("<h1 style='text-align: center;'>Utility Rate Analysis Tool</h1>", unsafe_allow_html=True)
+
+# Add reset button at the top of the app
+col1, col2 = st.columns([6, 1])
+with col2:
+    if st.button("Reset All"):
+        # Clear all session state variables
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.experimental_rerun()
+
+# Initialize session state variables
+if 'bill_calculated' not in st.session_state:
+    st.session_state.bill_calculated = False
+if 'current_bill' not in st.session_state:
+    st.session_state.current_bill = None
+if 'comparison_results' not in st.session_state:
+    st.session_state.comparison_results = []
+if 'bill_df' not in st.session_state:
+    st.session_state.bill_df = None
+
+# Create tabs for different functionalities
+tab1, tab2 = st.tabs(["Bill Estimation & Comparison", "Schedule Browser"])
+
 # Function to calculate the bill for the current schedule
 def calculate_current_bill(supabase, schedule_id, schedule_name, usage_kwh, usage_by_tou, demand_kw, power_factor, billing_month, has_energy_charges, has_demand_charges, has_reactive_demand):
     """Calculate full bill breakdown for the current schedule."""
@@ -645,101 +724,6 @@ def create_comparison_dataframe(comparison_results):
     df = pd.DataFrame(data)
     
     return df, best_rate_id, projected_best
-
-# Initialize session state variables
-if 'bill_calculated' not in st.session_state:
-    st.session_state.bill_calculated = False
-if 'current_bill' not in st.session_state:
-    st.session_state.current_bill = None
-if 'comparison_results' not in st.session_state:
-    st.session_state.comparison_results = []
-if 'bill_df' not in st.session_state:
-    st.session_state.bill_df = None
-
-# Configure page settings first (must be the first Streamlit command)
-st.set_page_config(
-    page_title="EVready Playbook",
-    page_icon="⚡",
-    layout="wide", 
-    initial_sidebar_state="expanded"
-)
-
-# Load environment variables from .env file if it exists (for local development)
-# Otherwise, rely on environment variables set in the deployment platform
-load_dotenv()
-
-# Try to get credentials from Streamlit secrets first, then fall back to environment variables
-try:
-    SUPABASE_URL = st.secrets["SUPABASE_URL"]
-    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-except Exception:
-    # Fall back to environment variables
-    SUPABASE_URL = os.getenv("SUPABASE_URL")
-    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-# Verify credentials and initialize Supabase client
-if not SUPABASE_URL or not SUPABASE_KEY:
-    st.error("⚠️ Supabase credentials not found. Please check your environment variables or Streamlit secrets.")
-    st.info("This app requires Supabase credentials to function. Please set up your credentials and try again.")
-    st.stop()  # This will prevent the rest of the app from running
-
-try:
-    # Initialize Supabase client with error handling
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
-    st.error(f"⚠️ Failed to connect to Supabase: {str(e)}")
-    st.info("Please check your credentials and make sure your Supabase project is running.")
-    st.stop()
-
-# Main app title with logo
-col_logo, col_title = st.columns([2, 4])  # Changed ratio to give more space to logo
-with col_logo:
-    try:
-        # First attempt to load the logo as PDF
-        import fitz  # PyMuPDF
-        from PIL import Image
-        import io
-        
-        # Open the PDF
-        pdf_document = fitz.open("logo.pdf")
-        # Get the first page
-        first_page = pdf_document[0]
-        # Render page to an image with higher resolution
-        pix = first_page.get_pixmap(matrix=fitz.Matrix(3, 3))  # Increased resolution
-        # Convert to PIL Image
-        img = Image.open(io.BytesIO(pix.tobytes()))
-        
-        # Display the converted image with increased width
-        st.image(img, width=200)  # Increased from 150 to 200
-        
-    except Exception as e:
-        # If PDF conversion fails, try to find PNG/JPG versions
-        try:
-            # Try common image formats
-            for ext in ["png", "jpg", "jpeg"]:
-                try:
-                    st.image(f"logo.{ext}", width=200)  # Increased from 150 to 200
-                    break
-                except:
-                    continue
-        except Exception as img_error:
-            # If all attempts fail, show a placeholder and error message
-            st.warning("Note: Company logo could not be loaded. Please ensure logo.png, logo.jpg, or logo.pdf exists in the app directory.")
-
-with col_title:
-    st.title("Utility Rate Analysis Tool")  # Removed the lightning emoji
-
-# Add reset button at the top of the app
-col1, col2 = st.columns([6, 1])
-with col2:
-    if st.button("Reset All"):
-        # Clear all session state variables
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.experimental_rerun()
-
-# Create tabs for different functionalities
-tab1, tab2 = st.tabs(["Bill Estimation & Comparison", "Schedule Browser"])
 
 # Tab 1: Bill Estimation Tool
 with tab1:
