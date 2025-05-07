@@ -1137,4 +1137,4 @@ def create_comparison_table(comparison_results):
 # Tab 2: Schedule Browser (placeholder for future implementation)
 with tab2:
     st.header("Utility Rate Schedule Browser")
-    st.info("This feature will allow you to browse through rate schedules. Coming soon!")st.info("This feature will allow you to browse through rate schedules. Coming soon!")
+    st.info("This feature will allow you to browse through rate schedules. Coming soon!")
