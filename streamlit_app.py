@@ -766,17 +766,15 @@ def create_comparison_dataframe(comparison_results):
 
 # IMPROVED: Create a horizontal bar chart for rate comparison
 def create_comparison_visualization(comparison_results):
-    """Create visual comparison of different rate schedules."""
+    """Create visual comparison of different rate schedules with improved clarity."""
     
     # Sort results by total cost (ascending)
     sorted_results = sorted(comparison_results, key=lambda x: x["total"])
     
     # Prepare data for chart
-    chart_data = {
-        'Rate Name': [],
-        'Monthly Cost ($)': [],
-        'Is Current Rate': []
-    }
+    labels = []
+    values = []
+    colors = []
     
     current_rate_id = comparison_results[0]["schedule_id"]
     
@@ -784,27 +782,27 @@ def create_comparison_visualization(comparison_results):
         # Extract the short name (without description)
         schedule_name = result["schedule_name"].split(" - ")[0] if " - " in result["schedule_name"] else result["schedule_name"]
         
-        chart_data['Rate Name'].append(schedule_name)
-        chart_data['Monthly Cost ($)'].append(result['total'])
-        chart_data['Is Current Rate'].append(result['schedule_id'] == current_rate_id)
-    
-    # Create DataFrame
-    chart_df = pd.DataFrame(chart_data)
+        labels.append(schedule_name)
+        values.append(result['total'])
+        colors.append('#ff7f0e' if result['schedule_id'] == current_rate_id else '#1f77b4')
     
     # Create horizontal bar chart with improved styling
-    fig, ax = plt.subplots(figsize=(10, max(4, len(chart_data['Rate Name']) * 0.8)))
+    fig, ax = plt.subplots(figsize=(10, max(3, len(labels) * 0.6)))
     
-    # Use different colors for current rate vs alternatives 
-    colors = ['#ff7f0e' if is_current else '#1f77b4' for is_current in chart_data['Is Current Rate']]
+    # Create horizontal bars with better spacing and reversed order (for bottom-to-top display)
+    y_pos = np.arange(len(labels))
+    bars = ax.barh(y_pos, values, height=0.4, color=colors)
     
-    # Create horizontal bars with improved spacing
-    bars = ax.barh(chart_data['Rate Name'], chart_data['Monthly Cost ($)'], color=colors, height=0.5)
+    # Set y-tick labels with the rate names
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(labels, fontsize=11, fontweight='bold')
     
-    # Add data labels with better positioning
+    # Add data labels with better positioning and contrast
     for bar in bars:
         width = bar.get_width()
-        ax.text(width + 5, bar.get_y() + bar.get_height()/2, f'${width:.2f}',
-                ha='left', va='center', fontweight='bold', fontsize=11)
+        ax.text(width + 5, bar.get_y() + bar.get_height()/2, f'${width:,.2f}',
+                ha='left', va='center', fontweight='bold', fontsize=11, 
+                bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=2))
     
     # Add a legend with better positioning
     from matplotlib.patches import Patch
@@ -817,15 +815,24 @@ def create_comparison_visualization(comparison_results):
     # Customize appearance
     ax.set_xlabel('Monthly Cost ($)', fontsize=12, fontweight='bold')
     ax.set_title('Rate Comparison', fontsize=14, fontweight='bold')
-    ax.grid(axis='x', linestyle='--', alpha=0.7)
+    
+    # Add gridlines for better readability
+    ax.grid(axis='x', linestyle='--', alpha=0.6, color='gray')
     ax.tick_params(axis='both', which='major', labelsize=10)
     
     # Set background color
-    ax.set_facecolor('#f5f5f5')
+    ax.set_facecolor('#f8f8f8')
+    fig.patch.set_facecolor('white')
     
     # Remove top and right spines
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
+    
+    # Set x-axis to show dollar values with commas
+    from matplotlib.ticker import FuncFormatter
+    def currency_formatter(x, pos):
+        return f'${x:,.0f}'
+    ax.xaxis.set_major_formatter(FuncFormatter(currency_formatter))
     
     # Ensure left margin for labels
     plt.tight_layout()
@@ -834,7 +841,7 @@ def create_comparison_visualization(comparison_results):
 
 # IMPROVED: Create a stacked bar chart showing cost breakdown across rates
 def create_cost_breakdown_comparison(comparison_results):
-    """Create stacked bar chart showing cost breakdown across rate schedules."""
+    """Create stacked bar chart showing cost breakdown across rate schedules with better clarity."""
     
     # Prepare data structure
     rate_names = []
@@ -868,61 +875,91 @@ def create_cost_breakdown_comparison(comparison_results):
             tax_amounts.append(0)
     
     # Create figure with better styling
-    fig, ax = plt.subplots(figsize=(12, max(5, len(rate_names) * 0.8)))
+    fig, ax = plt.subplots(figsize=(12, max(4, len(rate_names) * 0.6)))
     
     # Create stacked bars
-    bar_width = 0.6
+    bar_width = 0.5
+    y_pos = np.arange(len(rate_names))
     
     # Bottom positions for stacking
     bottoms = np.zeros(len(rate_names))
     
-    # Plot each component with improved colors
+    # Use more distinguishable colors
     component_data = [
-        (service_charges, 'Service Charges', '#4878D0'),
-        (energy_charges, 'Energy Charges', '#EE854A'),
-        (demand_charges, 'Demand Charges', '#6ACC64'),
-        (other_charges, 'Other Charges', '#D65F5F'),
-        (tax_amounts, 'Taxes', '#956CB4')
+        (service_charges, 'Service Charges', '#4878D0'),  # Blue
+        (energy_charges, 'Energy Charges', '#EE854A'),    # Orange
+        (demand_charges, 'Demand Charges', '#6ACC64'),    # Green
+        (other_charges, 'Other Charges', '#D65F5F'),      # Red
+        (tax_amounts, 'Taxes', '#956CB4')                 # Purple
     ]
     
     # Filter out components with all zeros
     component_data = [(data, label, color) for data, label, color in component_data if sum(data) > 0]
     
+    # Track component positions for labels
+    component_positions = {}
+    
     for data, label, color in component_data:
-        ax.barh(rate_names, data, bar_width, left=bottoms, label=label, color=color)
+        bars = ax.barh(y_pos, data, bar_width, left=bottoms, label=label, color=color)
         
-        # Add labels inside bars for significant components
+        # Store midpoints of each component for labels
         for i, (value, bottom) in enumerate(zip(data, bottoms)):
-            if value > max(totals) * 0.05:  # Only label if component is at least 5% of max total
-                # Position the text in the middle of each segment
-                text_x = bottom + value/2
-                text_y = i
-                ax.text(text_x, text_y, f"${value:.0f}", 
-                        ha='center', va='center', 
-                        color='white', fontweight='bold',
-                        fontsize=9)
-            
+            if value > max(totals) * 0.05:  # Only for significant components (>5% of max)
+                midpoint = bottom + value/2
+                if label not in component_positions:
+                    component_positions[label] = []
+                component_positions[label].append((i, midpoint, value))
+        
         bottoms += np.array(data)
     
-    # Add total cost labels at the end of each bar
+    # Add component labels after all bars are drawn
+    for label, positions in component_positions.items():
+        for i, x_mid, value in positions:
+            # Only add labels for components that take up enough space
+            if value > max(totals) * 0.07:  # Increased threshold for readability
+                ax.text(x_mid, i, f"${value:,.0f}", 
+                        ha='center', va='center', 
+                        color='white', fontweight='bold', fontsize=10,
+                        bbox=dict(facecolor='black', alpha=0.4, boxstyle='round,pad=0.2'))
+    
+    # Add total cost labels at the end of each bar with better contrast
     for i, total in enumerate(totals):
-        ax.text(total + 50, i, f'Total: ${total:.2f}', va='center', fontweight='bold', fontsize=10)
+        ax.text(total + max(totals)*0.02, i, f'Total: ${total:,.2f}', 
+                va='center', fontweight='bold', fontsize=11,
+                bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=3))
+    
+    # Set y-tick labels with the rate names
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(rate_names, fontsize=11, fontweight='bold')
     
     # Customize appearance
     ax.set_xlabel('Cost ($)', fontsize=12, fontweight='bold')
     ax.set_title('Cost Breakdown Comparison', fontsize=14, fontweight='bold')
-    ax.legend(loc='upper right', fontsize=10)
-    ax.grid(axis='x', linestyle='--', alpha=0.4)
+    
+    # Position legend better - outside the plot
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.12), 
+              fontsize=10, ncol=len(component_data))
+    
+    # Add gridlines
+    ax.grid(axis='x', linestyle='--', alpha=0.4, color='gray')
     ax.tick_params(axis='both', which='major', labelsize=10)
     
     # Set background color
-    ax.set_facecolor('#f5f5f5')
+    ax.set_facecolor('#f8f8f8')
+    fig.patch.set_facecolor('white')
     
     # Remove top and right spines
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     
-    plt.tight_layout()
+    # Format x-axis to show dollar values with commas
+    from matplotlib.ticker import FuncFormatter
+    def currency_formatter(x, pos):
+        return f'${x:,.0f}'
+    ax.xaxis.set_major_formatter(FuncFormatter(currency_formatter))
+    
+    # Add more space at the bottom for the legend
+    plt.subplots_adjust(bottom=0.2)
     
     return fig
 
@@ -1230,6 +1267,15 @@ with tab1:
                     if 'power_factor' not in st.session_state:
                         st.session_state.power_factor = 0.9
                         
+                    power_factor = st.slider(
+                        "Power Factor", 
+                        min_value=0.7, 
+                        max_value=1.0, 
+                        value=st.session_state.power_factor, 
+                        step=0.01,
+                        key="power_factor_tab1",  # Added unique key
+                        help="Power factor is the ratio of real power to apparent power in an electrical circuit."
+                    )
                     power_factor = st.slider(
                         "Power Factor", 
                         min_value=0.7, 
