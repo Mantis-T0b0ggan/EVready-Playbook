@@ -55,19 +55,20 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Center the logo using columns
-col1, col2, col3 = st.columns([1, 2, 1])
+# Center the logo using columns with adjusted ratio for perfect centering
+col1, col2, col3 = st.columns([3, 4, 3])
 
 with col2:
     try:
-        # Display logo with increased width
-        st.image("logo.png", width=350)
+        # Display logo with increased width and proper centering
+        st.image("logo.png", width=400, use_column_width=True)
     except Exception as e:
         # If loading fails, show warning
         st.warning("Note: Company logo could not be loaded. Please ensure logo.png exists in the app directory.")
 
 # Title centered on the page
-st.markdown("<h1 style='text-align: center; margin-top: 1rem;'>Utility Rate Analysis Tool</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; margin-top: 1.5rem;'>Utility Rate Analysis Tool</h1>", unsafe_allow_html=True)
+
 # Helper function to convert image file to base64 string for inline HTML
 def get_base64_from_file(file_path):
     import base64
