@@ -46,43 +46,28 @@ except Exception as e:
 st.markdown(
     """
     <style>
-        .logo-container {
+        .centered {
             display: flex;
             justify-content: center;
-            margin-bottom: 2rem;
-        }
-        .centered-image {
-            margin: 0 auto;
-            display: block;
         }
     </style>
-    <div class="logo-container">
     """, 
     unsafe_allow_html=True
 )
 
-# Display logo image
-try:
-    # Display logo with increased width - with CSS class for centering
-    st.markdown(
-        f"""
-        <img src="data:image/png;base64,{get_base64_from_file('logo.png')}" width="350" class="centered-image">
-        """,
-        unsafe_allow_html=True
-    )
-except Exception as e:
-    # If above method fails, try standard method
+# Center the logo using columns
+col1, col2, col3 = st.columns([1, 2, 1])
+
+with col2:
     try:
-        st.image("logo.png", width=350, use_column_width=False)
+        # Display logo with increased width
+        st.image("logo.png", width=350)
     except Exception as e:
         # If loading fails, show warning
         st.warning("Note: Company logo could not be loaded. Please ensure logo.png exists in the app directory.")
 
-st.markdown("</div>", unsafe_allow_html=True)
-
 # Title centered on the page
 st.markdown("<h1 style='text-align: center; margin-top: 1rem;'>Utility Rate Analysis Tool</h1>", unsafe_allow_html=True)
-
 # Helper function to convert image file to base64 string for inline HTML
 def get_base64_from_file(file_path):
     import base64
