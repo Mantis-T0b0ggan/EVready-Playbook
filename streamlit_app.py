@@ -691,8 +691,43 @@ except Exception as e:
     st.info("Please check your credentials and make sure your Supabase project is running.")
     st.stop()
 
-# Main app title
-st.title("⚡ Utility Rate Analysis Tool")
+# Main app title with logo
+col_logo, col_title = st.columns([1, 5])
+with col_logo:
+    try:
+        # First attempt to load the logo as PDF
+        import fitz  # PyMuPDF
+        from PIL import Image
+        import io
+        
+        # Open the PDF
+        pdf_document = fitz.open("logo.pdf")
+        # Get the first page
+        first_page = pdf_document[0]
+        # Render page to an image with higher resolution
+        pix = first_page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        # Convert to PIL Image
+        img = Image.open(io.BytesIO(pix.tobytes()))
+        
+        # Display the converted image
+        st.image(img, width=150)
+        
+    except Exception as e:
+        # If PDF conversion fails, try to find PNG/JPG versions
+        try:
+            # Try common image formats
+            for ext in ["png", "jpg", "jpeg"]:
+                try:
+                    st.image(f"logo.{ext}", width=150)
+                    break
+                except:
+                    continue
+        except Exception as img_error:
+            # If all attempts fail, show a placeholder and error message
+            st.warning("Note: Company logo could not be loaded. Please ensure logo.png, logo.jpg, or logo.pdf exists in the app directory.")
+
+with col_title:
+    st.title("⚡ Utility Rate Analysis Tool")
 
 # Add reset button at the top of the app
 col1, col2 = st.columns([6, 1])
