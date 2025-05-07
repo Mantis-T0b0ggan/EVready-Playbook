@@ -45,24 +45,49 @@ except Exception as e:
 # Main app title with logo - centered above the title
 st.markdown(
     """
-    <div style='display: flex; justify-content: center; margin-bottom: 1rem;'>
-        <div style='width: 300px; text-align: center;'>
+    <style>
+        .logo-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 2rem;
+        }
+        .centered-image {
+            margin: 0 auto;
+            display: block;
+        }
+    </style>
+    <div class="logo-container">
     """, 
     unsafe_allow_html=True
 )
 
 # Display logo image
 try:
-    # Display logo with increased width
-    st.image("logo.png", width=300)
+    # Display logo with increased width - with CSS class for centering
+    st.markdown(
+        f"""
+        <img src="data:image/png;base64,{get_base64_from_file('logo.png')}" width="350" class="centered-image">
+        """,
+        unsafe_allow_html=True
+    )
 except Exception as e:
-    # If loading fails, show warning
-    st.warning("Note: Company logo could not be loaded. Please ensure logo.png exists in the app directory.")
+    # If above method fails, try standard method
+    try:
+        st.image("logo.png", width=350, use_column_width=False)
+    except Exception as e:
+        # If loading fails, show warning
+        st.warning("Note: Company logo could not be loaded. Please ensure logo.png exists in the app directory.")
 
-st.markdown("</div></div>", unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
 
 # Title centered on the page
-st.markdown("<h1 style='text-align: center;'>Utility Rate Analysis Tool</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; margin-top: 1rem;'>Utility Rate Analysis Tool</h1>", unsafe_allow_html=True)
+
+# Helper function to convert image file to base64 string for inline HTML
+def get_base64_from_file(file_path):
+    import base64
+    with open(file_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode()
 
 # Add reset button at the top of the app
 col1, col2 = st.columns([6, 1])
