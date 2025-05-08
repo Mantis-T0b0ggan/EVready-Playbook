@@ -6,12 +6,80 @@ import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
-# Import components
-from config.app_config import configure_page
-from database.connection import initialize_database
-from ui.main_page import create_header
-from ui.inputs import create_input_forms
-from ui.outputs import display_results
+# Import components - adjusted to match your actual file structure
+from config import configure_page  # Changed from config.app_config
+from database_connection import initialize_database  # Changed from database.connection
+# Create placeholder functions for missing modules
+# These will need to be implemented or imported from the correct locations
+
+def create_header():
+    """Placeholder for header creation function."""
+    st.title("EVready Playbook")
+    st.markdown("Estimate and compare electricity costs for EV charging infrastructure")
+
+def create_input_forms(supabase, tab_id):
+    """Placeholder for input forms creation function."""
+    st.subheader("Input Your Details")
+    
+    # Create columns for a cleaner layout
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Select state
+        state = st.selectbox("Select State", ["California", "Oregon", "Washington"])
+        
+        # Select utility (this would normally come from the database)
+        utility = st.selectbox("Select Utility", ["Pacific Power", "PG&E", "SCE"])
+        
+        # Select rate schedule (this would normally come from the database)
+        schedule = st.selectbox("Select Rate Schedule", ["GS-TOU", "B-19", "TOU-GS-3"])
+    
+    with col2:
+        # Input usage details
+        usage_kwh = st.number_input("Monthly Energy Usage (kWh)", min_value=0.0, value=10000.0)
+        demand_kw = st.number_input("Peak Demand (kW)", min_value=0.0, value=50.0)
+        power_factor = st.slider("Power Factor", min_value=0.8, max_value=1.0, value=0.95, step=0.01)
+        billing_month = st.selectbox("Billing Month", ["January", "February", "March", "April", "May", "June", 
+                                                     "July", "August", "September", "October", "November", "December"])
+    
+    # Calculate button
+    calculate_pressed = st.button("Calculate Bill")
+    
+    # Return inputs as dictionary
+    return {
+        'state': state,
+        'utility': utility,
+        'schedule': schedule,
+        'usage_kwh': usage_kwh,
+        'demand_kw': demand_kw,
+        'power_factor': power_factor,
+        'billing_month': billing_month,
+        'calculate_pressed': calculate_pressed
+    }
+
+def display_results(supabase, inputs, tab_id):
+    """Placeholder for results display function."""
+    st.subheader("Bill Calculation Results")
+    
+    # Display a placeholder bill
+    st.metric("Estimated Monthly Bill", f"${2401.61}")
+    
+    # Create columns for bill breakdown
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Bill Breakdown")
+        st.markdown("""
+        - Service Charge: $49.28
+        - Energy Charge: $1,275.35
+        - Demand Charge: $925.00
+        - Other Charges: $37.62
+        - Taxes: $114.36
+        """)
+    
+    with col2:
+        st.subheader("Bill Composition")
+        st.text("Placeholder for bill composition chart")
 
 def main():
     """Main application entry point."""
