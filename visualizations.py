@@ -312,18 +312,35 @@ def generate_savings_analysis(comparison_results):
     savings = current_bill["total"] - best_option["total"]
     annual_savings = savings * 12
     
+    # Get the current rate name, handling possible formatting issues
+    try:
+        if " - " in current_bill["schedule_name"]:
+            current_name = current_bill["schedule_name"].split(" - ")[0]
+        else:
+            current_name = current_bill["schedule_name"]
+    except (KeyError, IndexError, AttributeError):
+        current_name = "current rate"
+    
     # Create savings analysis result
     if savings > 0 and best_option["schedule_id"] != current_bill["schedule_id"]:
+        # Get the best rate name, handling possible formatting issues
+        try:
+            if " - " in best_option["schedule_name"]:
+                best_name = best_option["schedule_name"].split(" - ")[0]
+            else:
+                best_name = best_option["schedule_name"]
+        except (KeyError, IndexError, AttributeError):
+            best_name = "alternative rate"
+            
         savings_text = (
-            f"**Potential Savings**: Switching to '{best_option['schedule_name'].split(' - ')[0]}' "
+            f"**Potential Savings**: Switching to '{best_name}' "
             f"could save approximately ${savings:.2f} per month based on your current usage.\n\n"
             f"**Annual Savings**: This amounts to approximately ${annual_savings:.2f} per year."
         )
         is_current_best = False
     else:
-        best_name = current_bill["schedule_name"].split(" - ")[0]
         savings_text = (
-            f"**Current Rate Optimal**: Your current rate '{best_name}' appears to be "
+            f"**Current Rate Optimal**: Your current rate '{current_name}' appears to be "
             f"the most cost-effective option based on your usage pattern."
         )
         is_current_best = True
