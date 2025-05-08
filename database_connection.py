@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 def initialize_database():
     """Initialize Supabase client and handle connection errors."""
-    # Load environment variables
+    # Load environment variables from .env file if it exists
     load_dotenv()
     
     # Try to get credentials from Streamlit secrets first, then environment variables
