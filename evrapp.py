@@ -25,25 +25,61 @@ def create_input_forms(supabase, tab_id):
     col1, col2 = st.columns(2)
     
     with col1:
-        # Select state
-        state = st.selectbox("Select State", ["California", "Oregon", "Washington"])
+        # Select state - add tab_id to make each widget ID unique
+        state = st.selectbox(
+            "Select State", 
+            ["California", "Oregon", "Washington"],
+            key=f"{tab_id}_state"
+        )
         
-        # Select utility (this would normally come from the database)
-        utility = st.selectbox("Select Utility", ["Pacific Power", "PG&E", "SCE"])
+        # Select utility with unique key
+        utility = st.selectbox(
+            "Select Utility", 
+            ["Pacific Power", "PG&E", "SCE"],
+            key=f"{tab_id}_utility"
+        )
         
-        # Select rate schedule (this would normally come from the database)
-        schedule = st.selectbox("Select Rate Schedule", ["GS-TOU", "B-19", "TOU-GS-3"])
+        # Select rate schedule with unique key
+        schedule = st.selectbox(
+            "Select Rate Schedule", 
+            ["GS-TOU", "B-19", "TOU-GS-3"],
+            key=f"{tab_id}_schedule"
+        )
     
     with col2:
-        # Input usage details
-        usage_kwh = st.number_input("Monthly Energy Usage (kWh)", min_value=0.0, value=10000.0)
-        demand_kw = st.number_input("Peak Demand (kW)", min_value=0.0, value=50.0)
-        power_factor = st.slider("Power Factor", min_value=0.8, max_value=1.0, value=0.95, step=0.01)
-        billing_month = st.selectbox("Billing Month", ["January", "February", "March", "April", "May", "June", 
-                                                     "July", "August", "September", "October", "November", "December"])
+        # Input usage details with unique keys
+        usage_kwh = st.number_input(
+            "Monthly Energy Usage (kWh)", 
+            min_value=0.0, 
+            value=10000.0,
+            key=f"{tab_id}_usage_kwh"
+        )
+        
+        demand_kw = st.number_input(
+            "Peak Demand (kW)", 
+            min_value=0.0, 
+            value=50.0,
+            key=f"{tab_id}_demand_kw"
+        )
+        
+        power_factor = st.slider(
+            "Power Factor", 
+            min_value=0.8, 
+            max_value=1.0, 
+            value=0.95, 
+            step=0.01,
+            key=f"{tab_id}_power_factor"
+        )
+        
+        billing_month = st.selectbox(
+            "Billing Month", 
+            ["January", "February", "March", "April", "May", "June", 
+             "July", "August", "September", "October", "November", "December"],
+            key=f"{tab_id}_billing_month"
+        )
     
-    # Calculate button
-    calculate_pressed = st.button("Calculate Bill")
+    # Calculate button with unique key
+    calculate_pressed = st.button("Calculate Bill", key=f"{tab_id}_calculate_button")
     
     # Return inputs as dictionary
     return {
@@ -62,14 +98,14 @@ def display_results(supabase, inputs, tab_id):
     st.subheader("Bill Calculation Results")
     
     # Display a placeholder bill
-    st.metric("Estimated Monthly Bill", f"${2401.61}")
+    st.metric(f"{tab_id}_total_bill", "Estimated Monthly Bill", f"${2401.61}")
     
     # Create columns for bill breakdown
     col1, col2 = st.columns(2)
     
     with col1:
         st.subheader("Bill Breakdown")
-        st.markdown("""
+        st.markdown(f"""
         - Service Charge: $49.28
         - Energy Charge: $1,275.35
         - Demand Charge: $925.00
@@ -121,7 +157,7 @@ def main():
         st.header("Utility Rate Schedule Browser")
         st.info("This feature will allow you to browse through rate schedules. Coming soon!")
         
-        # Create input forms for Tab 2
+        # Create input forms for Tab 2 (with different tab_id to ensure unique widget IDs)
         create_input_forms(supabase, "tab2")
 
 if __name__ == "__main__":
