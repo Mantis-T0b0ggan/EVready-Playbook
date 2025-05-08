@@ -340,7 +340,7 @@ def generate_savings_analysis(comparison_results):
         is_current_best = False
     else:
         savings_text = (
-            f"**Current Rate Optimal**: Your current rate '{current_name}' appears to be "
+            f"**Current Rate Optimal**: Your current rate '"{current_name}"' appears to be "
             f"the most cost-effective option based on your usage pattern."
         )
         is_current_best = True
