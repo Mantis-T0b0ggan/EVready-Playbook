@@ -1,15 +1,20 @@
 import streamlit as st
-from dotenv import load_dotenv
+import sys
 import os
 
+# Add current directory to path to make imports work
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
+
 # Import components
-from config import configure_page
+from config.app_config import configure_page
 from database.connection import initialize_database
 from ui.main_page import create_header
 from ui.inputs import create_input_forms
 from ui.outputs import display_results
 
 def main():
+    """Main application entry point."""
     # Configure page settings
     configure_page()
     
@@ -29,11 +34,18 @@ def main():
         st.header("Electric Bill Estimation Tool")
         st.markdown("Estimate your electric bill based on your usage and utility rate schedule.")
         
-        # Create input forms
+        # Create input forms and get inputs
         inputs = create_input_forms(supabase, "tab1")
         
-        # Display results if calculation is done
-        if st.session_state.get('bill_calculated', False):
+        # Display results if calculate button was pressed or calculation was already done
+        if (inputs.get('calculate_pressed', False) or 
+            st.session_state.get('bill_calculated', False)):
+            
+            # Set bill_calculated to True if calculate button was pressed
+            if inputs.get('calculate_pressed', False):
+                st.session_state.bill_calculated = True
+            
+            # Display results
             display_results(supabase, inputs, "tab1")
     
     # Tab 2: Schedule Browser (placeholder)
