@@ -119,17 +119,20 @@ def create_usage_inputs(selected_schedule_id, rate_components, tab_key):
     ]
     current_month_index = datetime.now().month - 1  # 0-based index
     
-    billing_month_key = f"billing_month_{tab_key}"
+    # Use session state to store default value, but don't update it after widget creation
+    billing_month_key = f"billing_month_default_{tab_key}"
     if billing_month_key not in st.session_state:
         st.session_state[billing_month_key] = months[current_month_index]
     
+    # Create the widget with the default value from session state
     billing_month = st.selectbox(
         "Billing Month", 
-        months, 
+        months,
         index=months.index(st.session_state[billing_month_key]) if st.session_state[billing_month_key] in months else current_month_index,
-        key=f"billing_month_{tab_key}"
+        key=f"billing_month_widget_{tab_key}"
     )
-    st.session_state[billing_month_key] = billing_month
+    
+    # Store the result in usage_inputs without updating session state with the same key
     usage_inputs["billing_month"] = billing_month
     
     # Always ask for energy usage (kWh) if applicable
@@ -137,18 +140,21 @@ def create_usage_inputs(selected_schedule_id, rate_components, tab_key):
         col1, col2 = st.columns([1, 1])
         
         with col1:
-            usage_kwh_key = f"usage_kwh_{tab_key}"
+            # Use session state to store default value
+            usage_kwh_key = f"usage_kwh_default_{tab_key}"
             if usage_kwh_key not in st.session_state:
                 st.session_state[usage_kwh_key] = 0.0
                 
+            # Create the widget with the default value from session state
             usage_kwh = st.number_input(
                 "Total Energy Usage (kWh)", 
                 min_value=0.0, 
                 step=10.0, 
                 value=st.session_state[usage_kwh_key],
-                key=f"usage_kwh_{tab_key}"
+                key=f"usage_kwh_widget_{tab_key}"
             )
-            st.session_state[usage_kwh_key] = usage_kwh
+            
+            # Store the result in usage_inputs
             usage_inputs["usage_kwh"] = usage_kwh
         
         # Time-of-use energy inputs if applicable
@@ -160,37 +166,43 @@ def create_usage_inputs(selected_schedule_id, rate_components, tab_key):
         col1, col2 = st.columns([1, 1])
         
         with col1:
-            demand_kw_key = f"demand_kw_{tab_key}"
+            # Use session state to store default value
+            demand_kw_key = f"demand_kw_default_{tab_key}"
             if demand_kw_key not in st.session_state:
                 st.session_state[demand_kw_key] = 0.0
                 
+            # Create the widget with the default value from session state
             demand_kw = st.number_input(
                 "Peak Demand (kW)", 
                 min_value=0.0, 
                 step=1.0,
                 value=st.session_state[demand_kw_key],
-                key=f"demand_kw_{tab_key}"
+                key=f"demand_kw_widget_{tab_key}"
             )
-            st.session_state[demand_kw_key] = demand_kw
+            
+            # Store the result in usage_inputs
             usage_inputs["demand_kw"] = demand_kw
         
         # If reactive demand is applicable, show power factor input
         if rate_components.get("has_reactive_demand", False):
             with col2:
-                power_factor_key = f"power_factor_{tab_key}"
+                # Use session state to store default value
+                power_factor_key = f"power_factor_default_{tab_key}"
                 if power_factor_key not in st.session_state:
                     st.session_state[power_factor_key] = 0.9
                     
+                # Create the widget with the default value from session state
                 power_factor = st.slider(
                     "Power Factor", 
                     min_value=0.7, 
                     max_value=1.0, 
                     value=st.session_state[power_factor_key], 
                     step=0.01,
-                    key=f"power_factor_{tab_key}",
+                    key=f"power_factor_widget_{tab_key}",
                     help="Power factor is the ratio of real power to apparent power in an electrical circuit."
                 )
-                st.session_state[power_factor_key] = power_factor
+                
+                # Store the result in usage_inputs
                 usage_inputs["power_factor"] = power_factor
     
     return usage_inputs
@@ -204,10 +216,7 @@ def handle_tou_inputs(tab_key, usage_kwh, tou_periods, usage_inputs):
     tou_cols = st.columns(2)
     col_idx = 0
     
-    usage_by_tou_key = f"usage_by_tou_{tab_key}"
-    if usage_by_tou_key not in st.session_state:
-        st.session_state[usage_by_tou_key] = {}
-    
+    # Initialize dictionary to store TOU values
     usage_by_tou = {}
     remaining_kwh = usage_kwh
     
@@ -219,23 +228,24 @@ def handle_tou_inputs(tab_key, usage_kwh, tou_periods, usage_inputs):
                 # For the last period, show the remaining amount
                 st.text(f"{period_key}")
                 st.text(f"Remaining: {remaining_kwh:.1f} kWh")
-                st.session_state[usage_by_tou_key][period_key] = remaining_kwh
                 usage_by_tou[period_key] = remaining_kwh
             else:
-                # Set default value for this period
-                if period_key not in st.session_state[usage_by_tou_key]:
-                    st.session_state[usage_by_tou_key][period_key] = 0.0
+                # Use session state to store default value
+                tou_default_key = f"tou_default_{i}_{tab_key}"
+                if tou_default_key not in st.session_state:
+                    st.session_state[tou_default_key] = 0.0
                     
+                # Create the widget with the default value from session state
                 period_usage = st.number_input(
                     f"{period_key} (kWh)", 
                     min_value=0.0, 
                     max_value=usage_kwh if usage_kwh else 0.0,
                     step=1.0,
-                    key=f"tou_energy_{i}_{tab_key}",
-                    value=st.session_state[usage_by_tou_key][period_key]
+                    value=st.session_state[tou_default_key],
+                    key=f"tou_widget_{i}_{tab_key}"
                 )
                 
-                st.session_state[usage_by_tou_key][period_key] = period_usage
+                # Store the result in usage_by_tou
                 usage_by_tou[period_key] = period_usage
                 remaining_kwh -= period_usage
         
