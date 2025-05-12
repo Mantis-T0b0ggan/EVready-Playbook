@@ -83,6 +83,25 @@ def insert_schedules(supabase, schedules, utility_id):
                 if field in schedule and schedule[field] == "":
                     schedule[field] = None
             
+            # Clean up numeric fields that contain text (like "80 MW")
+            for field in numeric_fields:
+                if field in schedule and schedule[field]:
+                    try:
+                        # Extract the numeric part
+                        value = schedule[field]
+                        if isinstance(value, str):
+                            # Remove any non-numeric characters except decimal point
+                            # This assumes the numeric value comes first
+                            import re
+                            numeric_part = re.match(r'^\s*(\d+(?:\.\d+)?)', value)
+                            if numeric_part:
+                                schedule[field] = float(numeric_part.group(1))
+                            else:
+                                schedule[field] = None
+                    except (ValueError, TypeError):
+                        # If conversion fails, set to None
+                        schedule[field] = None
+            
             # Use upsert to insert or update
             supabase.table("Schedule_Table").upsert(schedule).execute()
             inserted += 1
