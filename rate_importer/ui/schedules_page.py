@@ -204,7 +204,7 @@ def handle_load_schedules(supabase, utility_id):
         result = insert_schedules(supabase, schedules, utility_id)
         
         # Show the result
-        from ..ui.components import show_result_message
+        from ui.components import show_result_message
         show_result_message(result)
         
         # If successful, refresh the list of schedules
@@ -235,5 +235,5 @@ def handle_load_schedule_detail(supabase, schedule_id):
         result = insert_schedule_details(supabase, detail_data, schedule_id)
         
         # Show the result
-        from ..ui.components import show_result_message
+        from ui.components import show_result_message
         show_result_message(result)
