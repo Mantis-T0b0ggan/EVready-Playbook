@@ -7,6 +7,7 @@ import streamlit as st
 import sys
 import os
 import pandas as pd
+import time
 
 # Add rate_importer to path to enable imports
 current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -19,9 +20,11 @@ from utils.db_operations import (
     insert_schedules, 
     insert_schedule_details,
     get_utilities_from_database,
-    get_schedules_from_database
+    get_schedules_from_database,
+    check_schedule_status  # New import
 )
 from ui.components import show_result_message
+
 def render_schedules_section(supabase):
     """
     Render the schedules management section of the application.
@@ -141,15 +144,15 @@ def render_schedule_details_section(supabase):
     Returns:
         None
     """
-    st.header("Load Schedule Details")
-    st.markdown("Import detailed rate components for a specific schedule")
+    st.header("Manage Schedule Details")
+    st.markdown("Import detailed rate components for schedules")
     
     # Get the list of US states
     states = get_us_states()
     state_options = list(states.items())
     
-    # Create a three-column layout
-    col1, col2, col3 = st.columns(3)
+    # Create a two-column layout
+    col1, col2 = st.columns(2)
     
     with col1:
         selected_state = st.selectbox(
@@ -177,35 +180,49 @@ def render_schedule_details_section(supabase):
             else:
                 st.warning(f"No utilities found for {states.get(selected_state, '')}.")
     
-    # Get schedules for the selected utility
-    selected_schedule_id = None
+    # Check Schedule Status button
+    if selected_utility_id:
+        check_status_clicked = st.button(
+            "Check Schedule Status",
+            key="check_status_button",
+            help="Check the status of all schedules for this utility"
+        )
+        
+        # Process if button was clicked
+        if check_status_clicked:
+            handle_check_schedule_status(supabase, selected_utility_id)
+    
+    # Legacy individual schedule selection (Keep this for Option 3 approach)
+    st.markdown("---")
+    st.subheader("Single Schedule Detail Import")
+    st.markdown("Or, select a specific schedule to import details for:")
+    
     if selected_utility_id:
         schedules = get_schedules_from_database(supabase, selected_utility_id)
         
-        with col3:
-            # If schedules exist, show a selectbox
-            if schedules:
-                schedule_options = [(str(s["ScheduleID"]), s["ScheduleName"]) for s in schedules]
-                selected_schedule_id = st.selectbox(
-                    "Select a Schedule",
-                    options=[id for id, name in schedule_options],
-                    format_func=lambda x: next((name for id, name in schedule_options if id == x), x),
-                    key="detail_schedule_select"
+        # If schedules exist, show a selectbox
+        if schedules:
+            schedule_options = [(str(s["ScheduleID"]), s["ScheduleName"]) for s in schedules]
+            selected_schedule_id = st.selectbox(
+                "Select a Schedule",
+                options=[id for id, name in schedule_options],
+                format_func=lambda x: next((name for id, name in schedule_options if id == x), x),
+                key="detail_schedule_select"
+            )
+            
+            # Load schedule details button
+            if selected_schedule_id:
+                load_details_clicked = st.button(
+                    "Load Schedule Details",
+                    key="load_details_button",
+                    help="Fetch schedule details from RateAcuity and save to database"
                 )
-            else:
-                st.warning("No schedules found for this utility.")
-    
-    # Load schedule details button
-    if selected_schedule_id:
-        load_details_clicked = st.button(
-            "Load Schedule Details",
-            key="load_details_button",
-            help="Fetch schedule details from RateAcuity and save to database"
-        )
-        
-        # Process the load details request if button was clicked
-        if load_details_clicked and selected_schedule_id:
-            handle_load_schedule_detail(supabase, selected_schedule_id)
+                
+                # Process the load details request if button was clicked
+                if load_details_clicked and selected_schedule_id:
+                    handle_load_schedule_detail(supabase, selected_schedule_id)
+        else:
+            st.warning("No schedules found for this utility.")
 
 def handle_load_schedules(supabase, utility_id):
     """
@@ -231,7 +248,6 @@ def handle_load_schedules(supabase, utility_id):
         result = insert_schedules(supabase, schedules, utility_id)
         
         # Show the result
-        from ui.components import show_result_message
         show_result_message(result)
         
         # If successful, refresh the list of schedules
@@ -262,5 +278,149 @@ def handle_load_schedule_detail(supabase, schedule_id):
         result = insert_schedule_details(supabase, detail_data, schedule_id)
         
         # Show the result
-        from ui.components import show_result_message
         show_result_message(result)
+
+# New functions for schedule status checking and management
+
+def handle_check_schedule_status(supabase, utility_id):
+    """
+    Handle checking the status of all schedules for a utility.
+    
+    Args:
+        supabase: Supabase client instance
+        utility_id (str): Utility ID
+    
+    Returns:
+        None
+    """
+    # Show loading spinner
+    with st.spinner(f"Checking schedules for Utility {utility_id}..."):
+        # Fetch schedules from the API
+        schedules = get_schedules_by_utility(utility_id)
+        
+        if not schedules:
+            st.warning(f"No schedules found for Utility {utility_id} in RateAcuity API.")
+            return
+        
+        # Check status against the database
+        schedules_with_status = check_schedule_status(supabase, schedules, utility_id)
+        
+        # Display schedules with status
+        display_schedules_status_table(supabase, schedules_with_status)
+
+def display_schedules_status_table(supabase, schedules):
+    """
+    Display a table of schedules with their status and action buttons.
+    
+    Args:
+        supabase: Supabase client instance
+        schedules (list): List of schedules with status information
+    
+    Returns:
+        None
+    """
+    if not schedules:
+        st.warning("No schedules found.")
+        return
+    
+    st.subheader("Schedule Status")
+    
+    # Create a container for the table
+    table_container = st.container()
+    
+    # Create a container for status updates
+    status_container = st.empty()
+    
+    # Prepare the data for display
+    table_data = []
+    for idx, schedule in enumerate(schedules):
+        # Create a unique key for each action button
+        action_key = f"action_{schedule.get('ScheduleID')}_{idx}"
+        
+        table_data.append({
+            "Schedule ID": schedule.get("ScheduleID"),
+            "Schedule Name": schedule.get("ScheduleName", ""),
+            "Description": schedule.get("ScheduleDescription", ""),
+            "Status": schedule.get("status", ""),
+            "Action": action_key  # This will be replaced with buttons in the table
+        })
+    
+    # Create DataFrame for display
+    df = pd.DataFrame(table_data)
+    
+    # Display the table
+    with table_container:
+        st.dataframe(df, hide_index=True)
+    
+    # Add action buttons below the table
+    st.subheader("Actions")
+    
+    # Group schedules by status for better UI organization
+    needs_import = [s for s in schedules if s.get("status") == "Needs Full Import"]
+    needs_details = [s for s in schedules if s.get("status") == "Import Schedule Details"]
+    complete = [s for s in schedules if s.get("status") == "Full Schedule Data in EVready Database!"]
+    
+    # Display counts
+    st.write(f"📊 Summary: {len(needs_import)} need full import, {len(needs_details)} need details, {len(complete)} complete")
+    
+    # Action for schedules needing full import
+    if needs_import:
+        st.markdown("### Schedules Needing Full Import")
+        for schedule in needs_import:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.write(f"{schedule.get('ScheduleID')} - {schedule.get('ScheduleName')}")
+            with col2:
+                if st.button("Import Schedule", key=f"import_schedule_{schedule.get('ScheduleID')}"):
+                    handle_import_single_schedule(supabase, schedule, schedule.get('UtilityID'))
+    
+    # Action for schedules needing details
+    if needs_details:
+        st.markdown("### Schedules Needing Details")
+        for schedule in needs_details:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.write(f"{schedule.get('ScheduleID')} - {schedule.get('ScheduleName')}")
+            with col2:
+                if st.button("Import Details", key=f"import_details_{schedule.get('ScheduleID')}"):
+                    handle_load_schedule_detail(supabase, schedule.get('ScheduleID'))
+    
+    # Display complete schedules (no action needed)
+    if complete:
+        st.markdown("### Complete Schedules")
+        for schedule in complete:
+            st.write(f"✅ {schedule.get('ScheduleID')} - {schedule.get('ScheduleName')}")
+
+def handle_import_single_schedule(supabase, schedule, utility_id):
+    """
+    Handle importing a single schedule.
+    
+    Args:
+        supabase: Supabase client instance
+        schedule (dict): Schedule data
+        utility_id (str): Utility ID
+    
+    Returns:
+        None
+    """
+    # Show loading spinner
+    with st.spinner(f"Importing schedule {schedule.get('ScheduleID')}..."):
+        # Prepare the schedule data
+        schedules_list = [schedule]
+        
+        # Insert the schedule
+        result = insert_schedules(supabase, schedules_list, utility_id)
+        
+        # Show the result
+        show_result_message(result)
+        
+        # Prompt for details import
+        if result.get("inserted", 0) > 0:
+            st.success("Schedule imported successfully!")
+            import_details = st.button(
+                "Import Details Now?", 
+                key=f"details_prompt_{schedule.get('ScheduleID')}"
+            )
+            
+            if import_details:
+                handle_load_schedule_detail(supabase, schedule.get('ScheduleID'))
