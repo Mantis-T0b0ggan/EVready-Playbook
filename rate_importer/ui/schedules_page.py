@@ -107,7 +107,7 @@ def render_schedules_section(supabase):
             ),
             "Description": st.column_config.TextColumn(
                 "Description",
-                width="large",  # Allow description to use more space
+                width=650,  # Allow description to use more space
             ),
         }
         
