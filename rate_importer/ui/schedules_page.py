@@ -70,34 +70,59 @@ def render_schedules_section(supabase):
         selected_utility_id = None
     
     # Load schedules button
-    if selected_utility_id:
-        load_schedules_clicked = st.button(
-            "Load Schedules",
-            key="load_schedules_button",
-            help="Fetch schedules from RateAcuity and save to database"
+if selected_utility_id:
+    load_schedules_clicked = st.button(
+        "Load Schedules",
+        key="load_schedules_button",
+        help="Fetch schedules from RateAcuity and save to database"
+    )
+    
+    # Display existing schedules
+    st.subheader("Existing Schedules")
+    existing_schedules = get_schedules_from_database(supabase, selected_utility_id)
+    
+    if existing_schedules:
+        # Create a dataframe for display
+        schedule_data = []
+        for schedule in existing_schedules:
+            schedule_data.append({
+                "Schedule ID": schedule.get("ScheduleID"),
+                "Schedule Name": schedule.get("ScheduleName"),
+                "Description": schedule.get("ScheduleDescription") or "-"  # Display "-" if no description
+            })
+        
+        # Create DataFrame and display with custom column widths
+        df = pd.DataFrame(schedule_data)
+        
+        # Define custom column widths
+        column_config = {
+            "Schedule ID": st.column_config.NumberColumn(
+                "Schedule ID",
+                width="small",  # This makes the column narrow
+            ),
+            "Schedule Name": st.column_config.TextColumn(
+                "Schedule Name",
+                width="medium",  # Medium width for the name
+            ),
+            "Description": st.column_config.TextColumn(
+                "Description",
+                width="large",  # Allow description to use more space
+            ),
+        }
+        
+        # Display with custom column widths
+        st.dataframe(
+            df,
+            use_container_width=True,
+            column_config=column_config,
+            hide_index=True
         )
-        
-        # Display existing schedules
-        st.subheader("Existing Schedules")
-        existing_schedules = get_schedules_from_database(supabase, selected_utility_id)
-        
-        if existing_schedules:
-            # Create a dataframe for display
-            schedule_data = []
-            for schedule in existing_schedules:
-                schedule_data.append({
-                    "Schedule ID": schedule.get("ScheduleID"),
-                    "Schedule Name": schedule.get("ScheduleName"),
-                    "Description": schedule.get("ScheduleDescription") or "-"  # Display "-" if no description
-                })
-            
-            st.dataframe(schedule_data, use_container_width=True)
-        else:
-            st.info("No schedules found in the database for this utility.")
-        
-        # Process the load schedules request if button was clicked
-        if load_schedules_clicked and selected_utility_id:
-            handle_load_schedules(supabase, selected_utility_id)
+    else:
+        st.info("No schedules found in the database for this utility.")
+    
+    # Process the load schedules request if button was clicked
+    if load_schedules_clicked and selected_utility_id:
+        handle_load_schedules(supabase, selected_utility_id)
     
     # Add a separator
     st.markdown("---")
