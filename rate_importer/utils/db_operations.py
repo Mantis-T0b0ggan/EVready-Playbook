@@ -215,7 +215,7 @@ def get_schedules_from_database(supabase, utility_id):
     """
     try:
         response = supabase.table("Schedule_Table") \
-            .select("ScheduleID, ScheduleName") \
+            .select("ScheduleID, ScheduleName, ScheduleDescription") \
             .eq("UtilityID", utility_id) \
             .execute()
         
