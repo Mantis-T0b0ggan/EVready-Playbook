@@ -6,6 +6,7 @@ Handles the display and interaction for importing schedules and their details.
 import streamlit as st
 import sys
 import os
+import pandas as pd
 
 # Add rate_importer to path to enable imports
 current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
