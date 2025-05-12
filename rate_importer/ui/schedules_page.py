@@ -302,6 +302,10 @@ def handle_check_schedule_status(supabase, utility_id):
             st.warning(f"No schedules found for Utility {utility_id} in RateAcuity API.")
             return
         
+        # Make sure all schedules have the utility_id
+        for schedule in schedules:
+            schedule["UtilityID"] = utility_id
+        
         # Check status against the database
         schedules_with_status = check_schedule_status(supabase, schedules, utility_id)
         
@@ -325,32 +329,21 @@ def display_schedules_status_table(supabase, schedules):
     
     st.subheader("Schedule Status")
     
-    # Create a container for the table
-    table_container = st.container()
-    
-    # Create a container for status updates
-    status_container = st.empty()
-    
     # Prepare the data for display
     table_data = []
-    for idx, schedule in enumerate(schedules):
-        # Create a unique key for each action button
-        action_key = f"action_{schedule.get('ScheduleID')}_{idx}"
-        
+    for schedule in schedules:
         table_data.append({
             "Schedule ID": schedule.get("ScheduleID"),
             "Schedule Name": schedule.get("ScheduleName", ""),
             "Description": schedule.get("ScheduleDescription", ""),
-            "Status": schedule.get("status", ""),
-            "Action": action_key  # This will be replaced with buttons in the table
+            "Status": schedule.get("status", "")
         })
     
     # Create DataFrame for display
     df = pd.DataFrame(table_data)
     
     # Display the table
-    with table_container:
-        st.dataframe(df, hide_index=True)
+    st.dataframe(df, hide_index=True)
     
     # Add action buttons below the table
     st.subheader("Actions")
