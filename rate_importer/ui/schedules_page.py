@@ -4,15 +4,23 @@ Handles the display and interaction for importing schedules and their details.
 """
 
 import streamlit as st
-from ..utils.state_utils import get_us_states
-from ..utils.api_client import get_schedules_by_utility, get_schedule_detail
-from ..utils.db_operations import (
+import sys
+import os
+
+# Add rate_importer to path to enable imports
+current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(current_dir)
+
+# Direct imports instead of relative
+from utils.state_utils import get_us_states
+from utils.api_client import get_schedules_by_utility, get_schedule_detail
+from utils.db_operations import (
     insert_schedules, 
     insert_schedule_details,
     get_utilities_from_database,
     get_schedules_from_database
 )
-
+from ui.components import show_result_message
 def render_schedules_section(supabase):
     """
     Render the schedules management section of the application.
