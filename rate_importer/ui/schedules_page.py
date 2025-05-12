@@ -103,7 +103,7 @@ def render_schedules_section(supabase):
             ),
             "Schedule Name": st.column_config.TextColumn(
                 "Schedule Name",
-                width="medium",  # Medium width for the name
+                width="small",  # Medium width for the name
             ),
             "Description": st.column_config.TextColumn(
                 "Description",
