@@ -13,15 +13,17 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
-# Try direct import first
+# Try to import database_connection
 try:
+    # Try direct import first
     from database_connection import initialize_database
 except ImportError:
     # If that fails, try to import from the parent directory
-    from evready_playbook.database_connection import initialize_database
-
-# Import database connection
-from database_connection import initialize_database
+    try:
+        from evready_playbook.database_connection import initialize_database
+    except ImportError:
+        st.error("Could not import database_connection module. Please check your file structure.")
+        st.stop()
 
 # Import UI components
 from ui.components import create_header, create_about_section
