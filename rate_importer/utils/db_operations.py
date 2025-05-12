@@ -223,3 +223,74 @@ def get_schedules_from_database(supabase, utility_id):
     except Exception as e:
         st.error(f"Error retrieving schedules: {str(e)}")
         return []
+def check_schedule_status(supabase, schedules, utility_id):
+    """
+    Check the status of schedules against the database.
+    
+    Args:
+        supabase: Supabase client
+        schedules (list): List of schedules from RateAcuity
+        utility_id (str): Utility ID
+        
+    Returns:
+        list: List of schedules with added status information
+    """
+    # Get existing schedules from the database
+    existing_schedules = get_schedules_from_database(supabase, utility_id)
+    existing_schedule_ids = {str(s.get("ScheduleID")) for s in existing_schedules}
+    
+    # For each schedule, add a status field
+    for schedule in schedules:
+        schedule_id = str(schedule.get("ScheduleID"))
+        
+        # Check if schedule exists in database
+        if schedule_id not in existing_schedule_ids:
+            schedule["status"] = "Needs Full Import"
+            continue
+        
+        # Check if schedule details exist
+        has_details = check_schedule_details_exist(supabase, schedule_id)
+        
+        if has_details:
+            schedule["status"] = "Full Schedule Data in EVready Database!"
+        else:
+            schedule["status"] = "Import Schedule Details"
+    
+    return schedules
+
+def check_schedule_details_exist(supabase, schedule_id):
+    """
+    Check if schedule details exist for a given schedule ID.
+    
+    Args:
+        supabase: Supabase client
+        schedule_id (str): Schedule ID to check
+        
+    Returns:
+        bool: True if schedule details exist, False otherwise
+    """
+    try:
+        # Check tables that would contain schedule details
+        tables_to_check = [
+            "ServiceCharge_Table", 
+            "EnergyTime_Table", 
+            "DemandTime_Table",
+            "IncrementalEnergy_Table",
+            "IncrementalDemand_Table",
+            "Energy_Table",
+            "Demand_Table"
+        ]
+        
+        # Check each table for records with this schedule ID
+        for table_name in tables_to_check:
+            response = supabase.table(table_name).select("id").eq("ScheduleID", schedule_id).limit(1).execute()
+            
+            # If we find any records, details exist
+            if response.data and len(response.data) > 0:
+                return True
+        
+        # If we checked all tables and found nothing, no details exist
+        return False
+    except Exception as e:
+        st.error(f"Error checking schedule details: {str(e)}")
+        return False
