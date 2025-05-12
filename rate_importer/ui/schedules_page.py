@@ -70,12 +70,12 @@ def render_schedules_section(supabase):
         selected_utility_id = None
     
     # Load schedules button
-if selected_utility_id:
-    load_schedules_clicked = st.button(
-        "Load Schedules",
-        key="load_schedules_button",
-        help="Fetch schedules from RateAcuity and save to database"
-    )
+    if selected_utility_id:
+        load_schedules_clicked = st.button(
+            "Load Schedules",
+            key="load_schedules_button",
+            help="Fetch schedules from RateAcuity and save to database"
+        )
     
     # Display existing schedules
     st.subheader("Existing Schedules")
