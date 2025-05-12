@@ -87,7 +87,7 @@ def render_schedules_section(supabase):
             for schedule in existing_schedules:
                 schedule_data.append({
                     "Schedule ID": schedule.get("ScheduleID"),
-                    "Schedule Name": schedule.get("ScheduleName")
+                    "Schedule Name": schedule.get("ScheduleName"),
                     "Description": schedule.get("ScheduleDescription") or "-"  # Display "-" if no description
                 })
             
