@@ -2,11 +2,21 @@
 UI components for the Utilities page of the Rate Importer application.
 Handles the display and interaction for importing utilities.
 """
-
 import streamlit as st
-from ..utils.state_utils import get_us_states
-from ..utils.api_client import get_utilities
-from ..utils.db_operations import insert_utilities, get_utilities_from_database
+import sys
+import os
+
+# Add rate_importer to path to enable imports
+current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(current_dir)
+
+# Direct imports instead of relative
+from utils.state_utils import get_us_states
+from utils.api_client import get_utilities
+from utils.db_operations import insert_utilities, get_utilities_from_database
+from ui.components import show_result_message  # For the result message function
+
+# Rest of your code...
 
 def render_utilities_section(supabase):
     """
