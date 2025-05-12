@@ -88,6 +88,7 @@ def render_schedules_section(supabase):
                 schedule_data.append({
                     "Schedule ID": schedule.get("ScheduleID"),
                     "Schedule Name": schedule.get("ScheduleName")
+                    "Description": schedule.get("ScheduleDescription") or "-"  # Display "-" if no description
                 })
             
             st.dataframe(schedule_data, use_container_width=True)
