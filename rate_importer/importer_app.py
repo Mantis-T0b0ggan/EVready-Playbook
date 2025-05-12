@@ -13,6 +13,13 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
+# Try direct import first
+try:
+    from database_connection import initialize_database
+except ImportError:
+    # If that fails, try to import from the parent directory
+    from evready_playbook.database_connection import initialize_database
+
 # Import database connection
 from database_connection import initialize_database
 
