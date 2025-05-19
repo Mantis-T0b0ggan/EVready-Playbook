@@ -231,7 +231,7 @@ def create_cost_breakdown_comparison(comparison_results):
     return fig
 
 def create_bill_breakdown_chart(bill_breakdown):
-    """Create a cleaner, more professional pie chart for bill components."""
+    """Create a more reliable pie chart visualization for bill components."""
     # Prepare data for pie chart
     chart_data = {
         'Category': [],
@@ -278,7 +278,7 @@ def create_bill_breakdown_chart(bill_breakdown):
     fig, ax = plt.subplots(figsize=(8, 6.5), facecolor='white')
     
     # Create pie chart
-    wedges, texts = ax.pie(
+    wedges, _ = ax.pie(
         chart_df['Amount'], 
         labels=None,  # We'll add custom labels
         colors=colors[:len(chart_df)],
@@ -287,66 +287,67 @@ def create_bill_breakdown_chart(bill_breakdown):
         shadow=False
     )
     
-    # Add percentage labels inside the pie (only for segments large enough)
+    # Add percentage labels inside the pie for all segments
     for i, wedge in enumerate(wedges):
         percentage = chart_df.iloc[i]['Percentage']
         ang = (wedge.theta2 - wedge.theta1) / 2. + wedge.theta1
         
-        # Only add text if segment is large enough (>3%)
+        # For all segments, determine appropriate label position and size
         if percentage > 3:
+            # Large segments - add label inside
             x = np.cos(np.deg2rad(ang)) * 0.5
             y = np.sin(np.deg2rad(ang)) * 0.5
             ax.text(x, y, f"{percentage:.1f}%", 
                    ha='center', va='center', 
                    fontweight='bold', color='white', fontsize=11)
     
-    # Add organized external labels with dollar amounts
+    # Add consistent external labels with dollar amounts for ALL segments
     for i, wedge in enumerate(wedges):
         category = chart_df.iloc[i]['Category']
         amount = chart_df.iloc[i]['Amount']
         percentage = chart_df.iloc[i]['Percentage']
         
         ang = (wedge.theta2 - wedge.theta1) / 2. + wedge.theta1
-        x = np.cos(np.deg2rad(ang))
-        y = np.sin(np.deg2rad(ang))
         
-        # Different handling based on position in the pie
-        # Right side
-        if 0 <= ang < 90 or 270 < ang <= 360:
-            connectionstyle = f"angle,angleA=0,angleB={ang}"
-            x_text = 1.35
+        # Get coordinates on the pie circumference
+        # Use radius factor of 0.7 to be positioned closer to the edge of the pie
+        x = np.cos(np.deg2rad(ang)) * 0.7
+        y = np.sin(np.deg2rad(ang)) * 0.7
+        
+        # Position the text based on quadrant to ensure proper spacing
+        if 0 <= ang < 90:  # Upper right quadrant
+            xytext = (1.2, 0.4 + i*0.15)  # Adjust vertical position based on index
             ha = "left"
-        # Left side
-        else:
-            connectionstyle = f"angle,angleA=0,angleB={ang}"
-            x_text = -1.35
+        elif 90 <= ang < 180:  # Lower right quadrant
+            xytext = (1.2, -0.4 - i*0.15)
+            ha = "left"
+        elif 180 <= ang < 270:  # Lower left quadrant
+            xytext = (-1.2, -0.4 - i*0.15)
+            ha = "right"
+        else:  # Upper left quadrant
+            xytext = (-1.2, 0.4 + i*0.15)
             ha = "right"
         
-        # Skip very small segments (<1%) from having external labels
-        if percentage < 1:
-            continue
-            
-        # Adjust y position to prevent overlaps
-        y_text = 1.2 * y
-            
-        # Draw a clean line to the label
+        # Draw line to the label
         ax.annotate(
             category,
             xy=(x, y), 
-            xytext=(x_text, y_text),
+            xytext=xytext,
+            textcoords='axes fraction',
             horizontalalignment=ha,
-            arrowprops=dict(arrowstyle="-", connectionstyle=connectionstyle, color='gray', lw=1),
+            verticalalignment='center',
+            arrowprops=dict(arrowstyle="-", color='gray', lw=1),
             fontsize=12, fontweight='bold'
         )
         
         # Add dollar amount below the category name
-        dollar_y_offset = 0.15
+        dollar_y_offset = 0.1  # Reduced offset for better spacing
         ax.annotate(
             f"${amount:,.2f}",
-            xy=(x, y), 
-            xytext=(x_text, y_text - dollar_y_offset),
+            xy=(xytext[0], xytext[1] - dollar_y_offset),
+            xycoords='axes fraction',
             horizontalalignment=ha,
-            arrowprops=None,
+            verticalalignment='center',
             fontsize=10, fontweight='normal', color='#444444'
         )
     
