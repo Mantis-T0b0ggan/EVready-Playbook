@@ -63,7 +63,7 @@ def create_comparison_visualization(comparison_results):
     y_pos = np.arange(len(labels))
     bars = ax.barh(y_pos, values, height=0.6, color=colors)
     
-    # Set y-tick labels with the rate names - make them clearly visible
+    # Set y-tick labels with the rate names
     ax.set_yticks(y_pos)
     ax.set_yticklabels(labels, fontsize=12, fontweight='bold')
     
@@ -78,13 +78,15 @@ def create_comparison_visualization(comparison_results):
                 ha='left', va='center', fontweight='bold', fontsize=12, 
                 bbox=dict(facecolor='white', alpha=0.9, edgecolor='none', pad=3))
     
-    # Add a legend with better positioning
+    # Add a legend with better positioning - move completely out of the plot area
     from matplotlib.patches import Patch
     legend_elements = [
         Patch(facecolor='#ff7f0e', label='Current Rate'),
         Patch(facecolor='#1f77b4', label='Alternative Rates')
     ]
-    ax.legend(handles=legend_elements, loc='upper right', fontsize=11)
+    # Place legend outside the main chart area
+    ax.legend(handles=legend_elements, loc='upper center', 
+              bbox_to_anchor=(0.5, -0.15), ncol=2, fontsize=11)
     
     # Customize appearance
     ax.set_xlabel('Monthly Cost ($)', fontsize=13, fontweight='bold')
@@ -107,12 +109,12 @@ def create_comparison_visualization(comparison_results):
         return f'${x:,.0f}'
     ax.xaxis.set_major_formatter(FuncFormatter(currency_formatter))
     
-    # Add more padding on the right for labels - use significantly more space
+    # Add more padding on the right for labels
     right_padding = max(values) * 0.25  # 25% more space to the right
     ax.set_xlim(0, max(values) + right_padding)
     
-    # Ensure left margin for clear rate names
-    plt.subplots_adjust(left=0.25)  # Add more space on the left for rate names
+    # Ensure left margin for clear rate names and bottom margin for legend
+    plt.subplots_adjust(left=0.25, bottom=0.2)
     
     return fig
 
