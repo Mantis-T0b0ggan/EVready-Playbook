@@ -231,7 +231,7 @@ def create_cost_breakdown_comparison(comparison_results):
     return fig
 
 def create_bill_breakdown_chart(bill_breakdown):
-    """Create a clean, professional pie chart with legend on the left and total at the bottom."""
+    """Create a clean, professional pie chart with properly positioned legend."""
     # Prepare data for pie chart
     chart_data = {
         'Category': [],
@@ -271,11 +271,21 @@ def create_bill_breakdown_chart(bill_breakdown):
     # Create a professional color palette
     colors = ['#4285F4', '#EA4335', '#34A853', '#FBBC05', '#8C9EFF']
     
-    # Create figure with space for legend
-    fig, ax = plt.subplots(figsize=(8, 5.5), facecolor='white')
+    # Create figure with a 2-column layout
+    fig = plt.figure(figsize=(10, 5.5), facecolor='white')
+    
+    # Create a gridspec with 2 columns
+    gs = plt.GridSpec(1, 2, width_ratios=[1, 2])
+    
+    # Create legend axes on the left
+    legend_ax = fig.add_subplot(gs[0])
+    legend_ax.axis('off')  # Hide axes
+    
+    # Create pie chart axes on the right
+    pie_ax = fig.add_subplot(gs[1])
     
     # Create pie chart without labels initially
-    wedges, _ = ax.pie(
+    wedges, _ = pie_ax.pie(
         chart_df['Amount'], 
         labels=None,  # No labels on the pie itself
         colors=colors[:len(chart_df)],
@@ -291,7 +301,7 @@ def create_bill_breakdown_chart(bill_breakdown):
             ang = (wedge.theta2 - wedge.theta1) / 2. + wedge.theta1
             x = np.cos(np.deg2rad(ang)) * 0.5
             y = np.sin(np.deg2rad(ang)) * 0.5
-            ax.text(
+            pie_ax.text(
                 x, y, 
                 f"{pct:.1f}%", 
                 ha='center', 
@@ -301,13 +311,12 @@ def create_bill_breakdown_chart(bill_breakdown):
                 color='white'
             )
     
-    # Add a standalone legend - positioned to the left of the chart
+    # Add legend to the left side
     legend_labels = [f"{cat} (${amt:,.2f})" for cat, amt in zip(chart_df['Category'], chart_df['Amount'])]
-    ax.legend(
+    legend = legend_ax.legend(
         wedges, 
         legend_labels, 
-        loc='center left', 
-        bbox_to_anchor=(-0.35, 0.5),
+        loc='center', 
         fontsize=11,
         frameon=True,
         edgecolor='lightgray',
@@ -315,24 +324,22 @@ def create_bill_breakdown_chart(bill_breakdown):
     )
     
     # Equal aspect ratio ensures that pie is drawn as a circle
-    ax.axis('equal')
+    pie_ax.axis('equal')
     
     # Add title with better styling
-    plt.title('Bill Composition', fontsize=18, fontweight='bold', pad=15)
+    plt.suptitle('Bill Composition', fontsize=18, fontweight='bold', y=0.95)
     
     # Add total at the bottom with improved styling
-    plt.annotate(
+    fig.text(
+        0.65, 0.05, 
         f"Total Bill: ${total:,.2f}",
-        xy=(0.5, -0.1),
-        xycoords='axes fraction',
         ha='center',
         fontsize=14,
         fontweight='bold',
         bbox=dict(boxstyle="round,pad=0.4", facecolor='#f8f8f8', edgecolor='lightgray', alpha=0.7)
     )
     
-    # Adjust subplot positioning to make room for the legend on the left
-    plt.subplots_adjust(left=0.35, bottom=0.15)
+    plt.tight_layout(rect=[0, 0.05, 1, 0.95])  # Adjust for the title and total
     
     return fig
 
