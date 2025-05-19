@@ -54,40 +54,44 @@ def create_comparison_visualization(comparison_results):
         
         labels.append(schedule_name)
         values.append(result['total'])
-        colors.append('#EE854A' if result['schedule_id'] == current_rate_id else '#4878D0')
+        colors.append('#ff7f0e' if result['schedule_id'] == current_rate_id else '#1f77b4')
     
     # Create horizontal bar chart with improved styling
-    fig, ax = plt.subplots(figsize=(10, max(3, len(labels) * 0.6)))
+    fig, ax = plt.subplots(figsize=(10, max(4, len(labels) * 0.8)))
     
     # Create horizontal bars with better spacing
     y_pos = np.arange(len(labels))
-    bars = ax.barh(y_pos, values, height=0.5, color=colors)
+    bars = ax.barh(y_pos, values, height=0.6, color=colors)
     
-    # Set y-tick labels with the rate names
+    # Set y-tick labels with the rate names - make them clearly visible
     ax.set_yticks(y_pos)
     ax.set_yticklabels(labels, fontsize=12, fontweight='bold')
     
     # Add data labels with better positioning and contrast
-    for bar in bars:
+    for i, bar in enumerate(bars):
         width = bar.get_width()
-        ax.text(width + 5, bar.get_y() + bar.get_height()/2, f'${width:,.2f}',
+        label_text = f'${width:,.2f}'
+        if sorted_results[i]['schedule_id'] == current_rate_id:
+            label_text += ' (Current)'
+            
+        ax.text(width + max(values)*0.02, bar.get_y() + bar.get_height()/2, label_text,
                 ha='left', va='center', fontweight='bold', fontsize=12, 
-                bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=2))
+                bbox=dict(facecolor='white', alpha=0.9, edgecolor='none', pad=3))
     
     # Add a legend with better positioning
     from matplotlib.patches import Patch
     legend_elements = [
-        Patch(facecolor='#EE854A', label='Current Rate'),
-        Patch(facecolor='#4878D0', label='Alternative Rates')
+        Patch(facecolor='#ff7f0e', label='Current Rate'),
+        Patch(facecolor='#1f77b4', label='Alternative Rates')
     ]
-    ax.legend(handles=legend_elements, loc='upper right', fontsize=10)
+    ax.legend(handles=legend_elements, loc='upper right', fontsize=11)
     
     # Customize appearance
-    ax.set_xlabel('Monthly Cost ($)', fontsize=12, fontweight='bold')
-    ax.set_title('Rate Comparison', fontsize=14, fontweight='bold')
+    ax.set_xlabel('Monthly Cost ($)', fontsize=13, fontweight='bold')
+    ax.set_title('Rate Comparison', fontsize=16, fontweight='bold')
     
     # Add gridlines for better readability
-    ax.grid(axis='x', linestyle='--', alpha=0.6, color='gray')
+    ax.grid(axis='x', linestyle='--', alpha=0.7, color='gray')
     ax.tick_params(axis='both', which='major', labelsize=11)
     
     # Set background color
@@ -103,10 +107,12 @@ def create_comparison_visualization(comparison_results):
         return f'${x:,.0f}'
     ax.xaxis.set_major_formatter(FuncFormatter(currency_formatter))
     
-    # Add more padding on the right for labels
-    plt.tight_layout()
-    right_padding = max(values) * 0.15
+    # Add more padding on the right for labels - use significantly more space
+    right_padding = max(values) * 0.25  # 25% more space to the right
     ax.set_xlim(0, max(values) + right_padding)
+    
+    # Ensure left margin for clear rate names
+    plt.subplots_adjust(left=0.25)  # Add more space on the left for rate names
     
     return fig
 
