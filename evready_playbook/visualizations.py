@@ -231,7 +231,7 @@ def create_cost_breakdown_comparison(comparison_results):
     return fig
 
 def create_bill_breakdown_chart(bill_breakdown):
-    """Create a pie chart visualization for bill components."""
+    """Create a pie chart visualization for bill components with improved design."""
     # Prepare data for pie chart
     chart_data = {
         'Category': [],
@@ -268,35 +268,79 @@ def create_bill_breakdown_chart(bill_breakdown):
     
     if len(chart_df) == 0:
         # Return a figure with a "No data" message
-        fig, ax = plt.subplots(figsize=(4, 4))
-        ax.text(0.5, 0.5, "No bill data available", ha='center', va='center', fontsize=12)
+        fig, ax = plt.subplots(figsize=(6, 6), facecolor='white')
+        ax.text(0.5, 0.5, "No bill data available", ha='center', va='center', fontsize=14)
         ax.axis('off')
         return fig
     
-    # Create pie chart with improved styling
-    fig, ax = plt.subplots(figsize=(4, 4))
+    # Calculate total for dollar labels
+    total = chart_df['Amount'].sum()
     
-    # Use better colors
-    colors = ['#4878D0', '#EE854A', '#6ACC64', '#D65F5F', '#956CB4']
+    # Create pie chart with improved styling
+    fig, ax = plt.subplots(figsize=(7, 6), facecolor='white')
+    
+    # Use a more professional color palette
+    colors = ['#3366CC', '#FF9933', '#66CC99', '#CC6666', '#9966CC']
+    
+    # Create explode array to slightly highlight the largest component
+    largest_idx = chart_df['Amount'].idxmax()
+    explode = [0.03 if i == largest_idx else 0 for i in range(len(chart_df))]
     
     # Create pie chart with better styling
     wedges, texts, autotexts = ax.pie(
         chart_df['Amount'], 
         labels=chart_df['Category'], 
-        autopct='%1.1f%%',
+        autopct=lambda pct: f"{pct:.1f}%",
         colors=colors,
+        explode=explode,
         shadow=False,
         startangle=90,
-        wedgeprops={'edgecolor': 'w', 'linewidth': 1}
+        wedgeprops={'edgecolor': 'white', 'linewidth': 1.5, 'antialiased': True},
+        textprops={'fontsize': 12, 'fontweight': 'bold'}
     )
     
-    # Style the percentage text
+    # Style the percentage text for better readability
     for autotext in autotexts:
         autotext.set_color('white')
         autotext.set_fontweight('bold')
+        autotext.set_fontsize(12)
     
-    ax.set_title('Bill Composition', fontsize=14, fontweight='bold')
-    ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
+    # Add dollar values as annotations outside the pie
+    for i, (wedge, category, amount) in enumerate(zip(wedges, chart_df['Category'], chart_df['Amount'])):
+        # Get angle for text positioning
+        ang = (wedge.theta2 - wedge.theta1) / 2. + wedge.theta1
+        x = np.cos(np.deg2rad(ang))
+        y = np.sin(np.deg2rad(ang))
+        
+        # Calculate offset for the dollar amount text
+        # Larger offset for smaller wedges
+        horizontalalignment = {-1: "right", 1: "left"}[int(np.sign(x))]
+        connectionstyle = f"angle,angleA=0,angleB={ang}"
+        
+        # Only show dollar values for components that take up enough space
+        if amount / total > 0.05:  # Only show for segments > 5% of total
+            ax.annotate(
+                f"${amount:.2f}",
+                xy=(x, y), 
+                xytext=(1.35*np.sign(x), 1.4*y),
+                horizontalalignment=horizontalalignment,
+                arrowprops=dict(arrowstyle="-", connectionstyle=connectionstyle, color='gray', lw=1),
+                fontsize=10, fontweight='bold', color='black',
+                bbox=dict(boxstyle="round,pad=0.3", fc='#F8F8F8', ec="lightgray")
+            )
+    
+    # Add title with better styling
+    ax.set_title('Bill Composition', fontsize=18, fontweight='bold', pad=20)
+    
+    # Add a total at the bottom
+    fig.text(0.5, 0.01, f"Total Bill: ${total:.2f}", ha='center', fontsize=14, fontweight='bold')
+    
+    # Equal aspect ratio ensures that pie is drawn as a circle
+    ax.axis('equal')
+    
+    # Add a subtle border around the chart
+    fig.patch.set_linewidth(1)
+    fig.patch.set_edgecolor('#E0E0E0')
     
     plt.tight_layout()
     
