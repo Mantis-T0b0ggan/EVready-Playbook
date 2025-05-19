@@ -231,37 +231,26 @@ def create_cost_breakdown_comparison(comparison_results):
     return fig
 
 def create_bill_breakdown_chart(bill_breakdown):
-    """Create a pie chart visualization for bill components with improved design."""
+    """Create a cleaner, more professional pie chart for bill components."""
     # Prepare data for pie chart
     chart_data = {
         'Category': [],
         'Amount': []
     }
     
-    # Add service charge
-    if bill_breakdown.get('service_charge', 0) > 0:
-        chart_data['Category'].append('Service Charge')
-        chart_data['Amount'].append(bill_breakdown['service_charge'])
+    # Add components only if they exist and are > 0
+    components = [
+        ('Service Charge', 'service_charge'),
+        ('Energy Charges', 'energy_charge'),
+        ('Demand Charges', 'demand_charge'),
+        ('Other Charges', 'other_charges'),
+        ('Taxes', 'tax_amount')
+    ]
     
-    # Add energy charges
-    if bill_breakdown.get('energy_charge', 0) > 0:
-        chart_data['Category'].append('Energy Charges')
-        chart_data['Amount'].append(bill_breakdown['energy_charge'])
-    
-    # Add demand charges
-    if bill_breakdown.get('demand_charge', 0) > 0:
-        chart_data['Category'].append('Demand Charges')
-        chart_data['Amount'].append(bill_breakdown['demand_charge'])
-    
-    # Add other charges as a single item
-    if bill_breakdown.get('other_charges', 0) > 0:
-        chart_data['Category'].append('Other Charges')
-        chart_data['Amount'].append(bill_breakdown['other_charges'])
-    
-    # Add taxes as a single item
-    if bill_breakdown.get('tax_amount', 0) > 0:
-        chart_data['Category'].append('Taxes')
-        chart_data['Amount'].append(bill_breakdown['tax_amount'])
+    for label, key in components:
+        if bill_breakdown.get(key, 0) > 0:
+            chart_data['Category'].append(label)
+            chart_data['Amount'].append(bill_breakdown[key])
     
     # Create DataFrame
     chart_df = pd.DataFrame(chart_data)
@@ -273,74 +262,110 @@ def create_bill_breakdown_chart(bill_breakdown):
         ax.axis('off')
         return fig
     
-    # Calculate total for dollar labels
+    # Calculate total bill
     total = chart_df['Amount'].sum()
     
-    # Create pie chart with improved styling
-    fig, ax = plt.subplots(figsize=(7, 6), facecolor='white')
+    # Calculate percentages
+    chart_df['Percentage'] = chart_df['Amount'] / total * 100
     
-    # Use a more professional color palette
-    colors = ['#3366CC', '#FF9933', '#66CC99', '#CC6666', '#9966CC']
+    # Sort by amount (largest first) for consistent appearance
+    chart_df = chart_df.sort_values('Amount', ascending=False)
     
-    # Create explode array to slightly highlight the largest component
-    largest_idx = chart_df['Amount'].idxmax()
-    explode = [0.03 if i == largest_idx else 0 for i in range(len(chart_df))]
+    # Create a more professional and accessible color palette
+    colors = ['#3574C3', '#FF9E4A', '#7BC372', '#E66C67', '#9D7AC8']
     
-    # Create pie chart with better styling
-    wedges, texts, autotexts = ax.pie(
+    # Create figure with more space for annotations
+    fig, ax = plt.subplots(figsize=(8, 6.5), facecolor='white')
+    
+    # Create pie chart
+    wedges, texts = ax.pie(
         chart_df['Amount'], 
-        labels=chart_df['Category'], 
-        autopct=lambda pct: f"{pct:.1f}%",
-        colors=colors,
-        explode=explode,
-        shadow=False,
+        labels=None,  # We'll add custom labels
+        colors=colors[:len(chart_df)],
         startangle=90,
         wedgeprops={'edgecolor': 'white', 'linewidth': 1.5, 'antialiased': True},
-        textprops={'fontsize': 12, 'fontweight': 'bold'}
+        shadow=False
     )
     
-    # Style the percentage text for better readability
-    for autotext in autotexts:
-        autotext.set_color('white')
-        autotext.set_fontweight('bold')
-        autotext.set_fontsize(12)
+    # Add percentage labels inside the pie (only for segments large enough)
+    for i, wedge in enumerate(wedges):
+        percentage = chart_df.iloc[i]['Percentage']
+        ang = (wedge.theta2 - wedge.theta1) / 2. + wedge.theta1
+        
+        # Only add text if segment is large enough (>3%)
+        if percentage > 3:
+            x = np.cos(np.deg2rad(ang)) * 0.5
+            y = np.sin(np.deg2rad(ang)) * 0.5
+            ax.text(x, y, f"{percentage:.1f}%", 
+                   ha='center', va='center', 
+                   fontweight='bold', color='white', fontsize=11)
     
-    # Add dollar values as annotations outside the pie
-    for i, (wedge, category, amount) in enumerate(zip(wedges, chart_df['Category'], chart_df['Amount'])):
-        # Get angle for text positioning
+    # Add organized external labels with dollar amounts
+    for i, wedge in enumerate(wedges):
+        category = chart_df.iloc[i]['Category']
+        amount = chart_df.iloc[i]['Amount']
+        percentage = chart_df.iloc[i]['Percentage']
+        
         ang = (wedge.theta2 - wedge.theta1) / 2. + wedge.theta1
         x = np.cos(np.deg2rad(ang))
         y = np.sin(np.deg2rad(ang))
         
-        # Calculate offset for the dollar amount text
-        # Larger offset for smaller wedges
-        horizontalalignment = {-1: "right", 1: "left"}[int(np.sign(x))]
-        connectionstyle = f"angle,angleA=0,angleB={ang}"
+        # Different handling based on position in the pie
+        # Right side
+        if 0 <= ang < 90 or 270 < ang <= 360:
+            connectionstyle = f"angle,angleA=0,angleB={ang}"
+            x_text = 1.35
+            ha = "left"
+        # Left side
+        else:
+            connectionstyle = f"angle,angleA=0,angleB={ang}"
+            x_text = -1.35
+            ha = "right"
         
-        # Only show dollar values for components that take up enough space
-        if amount / total > 0.05:  # Only show for segments > 5% of total
-            ax.annotate(
-                f"${amount:.2f}",
-                xy=(x, y), 
-                xytext=(1.35*np.sign(x), 1.4*y),
-                horizontalalignment=horizontalalignment,
-                arrowprops=dict(arrowstyle="-", connectionstyle=connectionstyle, color='gray', lw=1),
-                fontsize=10, fontweight='bold', color='black',
-                bbox=dict(boxstyle="round,pad=0.3", fc='#F8F8F8', ec="lightgray")
-            )
-    
-    # Add title with better styling
-    ax.set_title('Bill Composition', fontsize=18, fontweight='bold', pad=20)
-    
-    # Add a total at the bottom
-    fig.text(0.5, 0.01, f"Total Bill: ${total:.2f}", ha='center', fontsize=14, fontweight='bold')
+        # Skip very small segments (<1%) from having external labels
+        if percentage < 1:
+            continue
+            
+        # Adjust y position to prevent overlaps
+        y_text = 1.2 * y
+            
+        # Draw a clean line to the label
+        ax.annotate(
+            category,
+            xy=(x, y), 
+            xytext=(x_text, y_text),
+            horizontalalignment=ha,
+            arrowprops=dict(arrowstyle="-", connectionstyle=connectionstyle, color='gray', lw=1),
+            fontsize=12, fontweight='bold'
+        )
+        
+        # Add dollar amount below the category name
+        dollar_y_offset = 0.15
+        ax.annotate(
+            f"${amount:,.2f}",
+            xy=(x, y), 
+            xytext=(x_text, y_text - dollar_y_offset),
+            horizontalalignment=ha,
+            arrowprops=None,
+            fontsize=10, fontweight='normal', color='#444444'
+        )
     
     # Equal aspect ratio ensures that pie is drawn as a circle
     ax.axis('equal')
     
-    # Add a subtle border around the chart
-    fig.patch.set_linewidth(1)
-    fig.patch.set_edgecolor('#E0E0E0')
+    # Add title with better styling
+    plt.title('Bill Composition', fontsize=20, fontweight='bold', pad=15)
+    
+    # Add total at the bottom with improved styling
+    plt.annotate(
+        f"Total Bill: ${total:,.2f}",
+        xy=(0.5, -0.1),
+        xycoords='axes fraction',
+        ha='center',
+        fontsize=14,
+        fontweight='bold',
+        bbox=dict(boxstyle="round,pad=0.4", facecolor='#f8f8f8', edgecolor='lightgray', alpha=0.7)
+    )
     
     plt.tight_layout()
     
