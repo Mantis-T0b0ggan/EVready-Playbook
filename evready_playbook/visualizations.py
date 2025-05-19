@@ -231,7 +231,7 @@ def create_cost_breakdown_comparison(comparison_results):
     return fig
 
 def create_bill_breakdown_chart(bill_breakdown):
-    """Create a clean, professional pie chart with properly positioned legend."""
+    """Create a clean, professional pie chart with properly positioned legend and small segment indicator."""
     # Prepare data for pie chart
     chart_data = {
         'Category': [],
@@ -294,10 +294,16 @@ def create_bill_breakdown_chart(bill_breakdown):
         shadow=False
     )
     
+    # Find small segments (< 3%)
+    small_segments = []
+    for i, (wedge, pct) in enumerate(zip(wedges, chart_df['Percentage'])):
+        if pct < 3:
+            small_segments.append((i, wedge, pct))
+    
     # Add percentage labels inside the pie but only for segments > 3%
     for i, wedge in enumerate(wedges):
         pct = chart_df.iloc[i]['Percentage']
-        if pct > 3:  # Only add percentage text for segments large enough
+        if pct >= 3:  # Only add percentage text for segments large enough
             ang = (wedge.theta2 - wedge.theta1) / 2. + wedge.theta1
             x = np.cos(np.deg2rad(ang)) * 0.5
             y = np.sin(np.deg2rad(ang)) * 0.5
@@ -311,8 +317,16 @@ def create_bill_breakdown_chart(bill_breakdown):
                 color='white'
             )
     
+    # Create enhanced legend labels with percentages
+    legend_labels = []
+    for i, (cat, amt, pct) in enumerate(zip(chart_df['Category'], chart_df['Amount'], chart_df['Percentage'])):
+        # Add percentage to legend for small segments
+        if pct < 3:
+            legend_labels.append(f"{cat} (${amt:,.2f}, {pct:.1f}%)")
+        else:
+            legend_labels.append(f"{cat} (${amt:,.2f})")
+    
     # Add legend to the left side
-    legend_labels = [f"{cat} (${amt:,.2f})" for cat, amt in zip(chart_df['Category'], chart_df['Amount'])]
     legend = legend_ax.legend(
         wedges, 
         legend_labels, 
@@ -322,6 +336,30 @@ def create_bill_breakdown_chart(bill_breakdown):
         edgecolor='lightgray',
         facecolor='white'
     )
+    
+    # Add visual indicator for very small segments
+    for i, wedge, pct in small_segments:
+        # Get the angle for the small segment
+        ang = (wedge.theta2 - wedge.theta1) / 2. + wedge.theta1
+        # Get position on edge of pie
+        edge_x = np.cos(np.deg2rad(ang)) * 0.8  # Slightly outward from pie
+        edge_y = np.sin(np.deg2rad(ang)) * 0.8
+        
+        # Add a small indicator arrow
+        pie_ax.annotate(
+            f"{pct:.1f}%",
+            xy=(edge_x, edge_y),  # Arrow points to this position
+            xytext=(edge_x * 1.4, edge_y * 1.4),  # Text position
+            arrowprops=dict(
+                arrowstyle="->",
+                connectionstyle="arc3,rad=0.2",
+                color='gray'
+            ),
+            fontsize=9,
+            fontweight='bold',
+            color='black',
+            bbox=dict(boxstyle="round,pad=0.2", facecolor='white', alpha=0.8, edgecolor='lightgray')
+        )
     
     # Equal aspect ratio ensures that pie is drawn as a circle
     pie_ax.axis('equal')
