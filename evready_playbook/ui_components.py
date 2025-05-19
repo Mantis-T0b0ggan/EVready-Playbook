@@ -54,6 +54,10 @@ def display_charges_breakdown():
         df = st.session_state.bill_df.copy()
         df["Amount"] = df["Amount"].apply(lambda x: f"${x:,.2f}")
         st.table(df)
+        
+        # Show note if default tax rate was used
+        if "bill_breakdown" in st.session_state and st.session_state.bill_breakdown.get("using_default_tax", False):
+            st.info("Note: Using default tax rate of 6% as no specific tax information was found for this rate schedule.")
     else:
         st.warning("No charges found for this schedule.")
 
