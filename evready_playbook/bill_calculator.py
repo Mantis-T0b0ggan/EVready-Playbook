@@ -230,20 +230,30 @@ def calculate_bill(supabase, schedule_id, schedule_name, usage_kwh, demand_kw, p
         
         # 5. Calculate taxes
         subtotal = service_charge + energy_charge + demand_charge + other_charges
-        
+    
+    try:
+        # Check if tax data exists for this schedule
         tax_response = supabase.from_("TaxInfo_Table").select("Per_cent").eq("ScheduleID", schedule_id).execute()
-        for tax in tax_response.data:
-            try:
-                tax_rate = float(tax.get("Per_cent", 0)) if tax.get("Per_cent") is not None else 0.0
-                tax_amount += subtotal * (tax_rate / 100)
-            except (ValueError, TypeError):
-                pass
         
-        # Calculate total bill
-        total_bill = subtotal + tax_amount
-        
-    except Exception as e:
-        st.warning(f"Error calculating bill for schedule {schedule_id}: {str(e)}")
+        if tax_response.data and len(tax_response.data) > 0:
+            # Use tax data from database
+            for tax in tax_response.data:
+                try:
+                    tax_rate = float(tax.get("Per_cent", 0)) if tax.get("Per_cent") is not None else 0.0
+                    tax_amount += subtotal * (tax_rate / 100)
+                except (ValueError, TypeError):
+                    pass
+        else:
+            # No tax data found, use default 6% tax rate
+            default_tax_rate = 6.0
+            tax_amount = subtotal * (default_tax_rate / 100)
+    except Exception:
+        # Fall back to default tax rate if there's an error
+        default_tax_rate = 6.0
+        tax_amount = subtotal * (default_tax_rate / 100)
+    
+    # Calculate total bill
+    total_bill = subtotal + tax_amount
     
     # Create breakdown dictionary
     breakdown = {
@@ -261,7 +271,7 @@ def calculate_bill(supabase, schedule_id, schedule_name, usage_kwh, demand_kw, p
         "schedule_name": schedule_name,
         "total": total_bill,
         "projected": total_bill * 1.02,  # Simple 2% projection
-        "breakdown": breakdown
+        "breakdown": breakdown  # Store the breakdown for visualization
     }
 
 def calculate_service_charges(supabase, schedule_id):
