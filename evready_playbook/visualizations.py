@@ -231,7 +231,7 @@ def create_cost_breakdown_comparison(comparison_results):
     return fig
 
 def create_bill_breakdown_chart(bill_breakdown):
-    """Create a simplified, clean pie chart with labels."""
+    """Create a clean, professional pie chart for bill components."""
     # Prepare data for pie chart
     chart_data = {
         'Category': [],
@@ -268,37 +268,47 @@ def create_bill_breakdown_chart(bill_breakdown):
     # Calculate percentages
     chart_df['Percentage'] = chart_df['Amount'] / total * 100
     
-    # Create a clean, readable color palette
+    # Create a professional color palette
     colors = ['#4285F4', '#EA4335', '#34A853', '#FBBC05', '#8C9EFF']
     
-    # Create figure
-    fig, ax = plt.subplots(figsize=(7, 6), facecolor='white')
+    # Create figure with more space for legend
+    fig, ax = plt.subplots(figsize=(7, 5.5), facecolor='white')
     
-    # Create pie chart
-    patches, texts, autotexts = ax.pie(
+    # Create pie chart without labels initially
+    wedges, _ = ax.pie(
         chart_df['Amount'], 
-        labels=chart_df['Category'],
-        autopct='%1.1f%%',
+        labels=None,  # No labels on the pie itself
         colors=colors[:len(chart_df)],
         startangle=90,
         wedgeprops={'edgecolor': 'white', 'linewidth': 1.5},
-        textprops={'fontsize': 12, 'fontweight': 'bold'},
         shadow=False
     )
     
-    # Make percentage labels white and bold for better contrast
-    for autotext in autotexts:
-        autotext.set_color('white')
-        autotext.set_fontweight('bold')
+    # Add percentage labels inside the pie but only for segments > 3%
+    for i, wedge in enumerate(wedges):
+        pct = chart_df.iloc[i]['Percentage']
+        if pct > 3:  # Only add percentage text for segments large enough
+            ang = (wedge.theta2 - wedge.theta1) / 2. + wedge.theta1
+            x = np.cos(np.deg2rad(ang)) * 0.5
+            y = np.sin(np.deg2rad(ang)) * 0.5
+            ax.text(
+                x, y, 
+                f"{pct:.1f}%", 
+                ha='center', 
+                va='center', 
+                fontsize=12, 
+                fontweight='bold', 
+                color='white'
+            )
     
-    # Add a legend with dollar amounts
+    # Add a standalone legend - positioned to the right of the chart
     legend_labels = [f"{cat} (${amt:,.2f})" for cat, amt in zip(chart_df['Category'], chart_df['Amount'])]
     ax.legend(
-        patches, 
+        wedges, 
         legend_labels, 
-        loc='center left', 
-        bbox_to_anchor=(0.0, 0.5),
-        fontsize=10,
+        loc='center right', 
+        bbox_to_anchor=(1.35, 0.5),
+        fontsize=11,
         frameon=True,
         edgecolor='lightgray',
         facecolor='white'
@@ -307,10 +317,10 @@ def create_bill_breakdown_chart(bill_breakdown):
     # Equal aspect ratio ensures that pie is drawn as a circle
     ax.axis('equal')
     
-    # Add title
+    # Add title with better styling
     plt.title('Bill Composition', fontsize=18, fontweight='bold', pad=15)
     
-    # Add total at the bottom
+    # Add total at the bottom with improved styling
     plt.annotate(
         f"Total Bill: ${total:,.2f}",
         xy=(0.5, -0.1),
@@ -321,7 +331,8 @@ def create_bill_breakdown_chart(bill_breakdown):
         bbox=dict(boxstyle="round,pad=0.4", facecolor='#f8f8f8', edgecolor='lightgray', alpha=0.7)
     )
     
-    plt.tight_layout()
+    # Add more padding to the right for the legend
+    plt.subplots_adjust(right=0.65)
     
     return fig
 
