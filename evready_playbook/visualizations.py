@@ -231,7 +231,7 @@ def create_cost_breakdown_comparison(comparison_results):
     return fig
 
 def create_bill_breakdown_chart(bill_breakdown):
-    """Create a clean, professional pie chart for bill components."""
+    """Create a clean, professional pie chart with legend on the left and total at the bottom."""
     # Prepare data for pie chart
     chart_data = {
         'Category': [],
@@ -271,8 +271,8 @@ def create_bill_breakdown_chart(bill_breakdown):
     # Create a professional color palette
     colors = ['#4285F4', '#EA4335', '#34A853', '#FBBC05', '#8C9EFF']
     
-    # Create figure with more space for legend
-    fig, ax = plt.subplots(figsize=(7, 5.5), facecolor='white')
+    # Create figure with space for legend
+    fig, ax = plt.subplots(figsize=(8, 5.5), facecolor='white')
     
     # Create pie chart without labels initially
     wedges, _ = ax.pie(
@@ -301,13 +301,13 @@ def create_bill_breakdown_chart(bill_breakdown):
                 color='white'
             )
     
-    # Add a standalone legend - positioned to the right of the chart
+    # Add a standalone legend - positioned to the left of the chart
     legend_labels = [f"{cat} (${amt:,.2f})" for cat, amt in zip(chart_df['Category'], chart_df['Amount'])]
     ax.legend(
         wedges, 
         legend_labels, 
-        loc='center right', 
-        bbox_to_anchor=(1.35, 0.5),
+        loc='center left', 
+        bbox_to_anchor=(-0.35, 0.5),
         fontsize=11,
         frameon=True,
         edgecolor='lightgray',
@@ -331,8 +331,8 @@ def create_bill_breakdown_chart(bill_breakdown):
         bbox=dict(boxstyle="round,pad=0.4", facecolor='#f8f8f8', edgecolor='lightgray', alpha=0.7)
     )
     
-    # Add more padding to the right for the legend
-    plt.subplots_adjust(right=0.65)
+    # Adjust subplot positioning to make room for the legend on the left
+    plt.subplots_adjust(left=0.35, bottom=0.15)
     
     return fig
 
