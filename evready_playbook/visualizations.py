@@ -54,31 +54,31 @@ def create_comparison_visualization(comparison_results):
         
         labels.append(schedule_name)
         values.append(result['total'])
-        colors.append('#ff7f0e' if result['schedule_id'] == current_rate_id else '#1f77b4')
+        colors.append('#EE854A' if result['schedule_id'] == current_rate_id else '#4878D0')
     
     # Create horizontal bar chart with improved styling
     fig, ax = plt.subplots(figsize=(10, max(3, len(labels) * 0.6)))
     
     # Create horizontal bars with better spacing
     y_pos = np.arange(len(labels))
-    bars = ax.barh(y_pos, values, height=0.4, color=colors)
+    bars = ax.barh(y_pos, values, height=0.5, color=colors)
     
     # Set y-tick labels with the rate names
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(labels, fontsize=11, fontweight='bold')
+    ax.set_yticklabels(labels, fontsize=12, fontweight='bold')
     
     # Add data labels with better positioning and contrast
     for bar in bars:
         width = bar.get_width()
         ax.text(width + 5, bar.get_y() + bar.get_height()/2, f'${width:,.2f}',
-                ha='left', va='center', fontweight='bold', fontsize=11, 
-                bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=2))
+                ha='left', va='center', fontweight='bold', fontsize=12, 
+                bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=2))
     
     # Add a legend with better positioning
     from matplotlib.patches import Patch
     legend_elements = [
-        Patch(facecolor='#ff7f0e', label='Current Rate'),
-        Patch(facecolor='#1f77b4', label='Alternative Rates')
+        Patch(facecolor='#EE854A', label='Current Rate'),
+        Patch(facecolor='#4878D0', label='Alternative Rates')
     ]
     ax.legend(handles=legend_elements, loc='upper right', fontsize=10)
     
@@ -88,7 +88,7 @@ def create_comparison_visualization(comparison_results):
     
     # Add gridlines for better readability
     ax.grid(axis='x', linestyle='--', alpha=0.6, color='gray')
-    ax.tick_params(axis='both', which='major', labelsize=10)
+    ax.tick_params(axis='both', which='major', labelsize=11)
     
     # Set background color
     ax.set_facecolor('#f8f8f8')
@@ -103,8 +103,10 @@ def create_comparison_visualization(comparison_results):
         return f'${x:,.0f}'
     ax.xaxis.set_major_formatter(FuncFormatter(currency_formatter))
     
-    # Ensure left margin for labels
+    # Add more padding on the right for labels
     plt.tight_layout()
+    right_padding = max(values) * 0.15
+    ax.set_xlim(0, max(values) + right_padding)
     
     return fig
 
