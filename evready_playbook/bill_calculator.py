@@ -609,34 +609,58 @@ def calculate_taxes(supabase, schedule_id, subtotal):
     """Calculate taxes for a schedule."""
     tax_amount = 0.0
     tax_breakdown = []
+    using_default_tax = False
     
     try:
         tax_response = supabase.from_("TaxInfo_Table").select("*").eq("ScheduleID", schedule_id).execute()
         
-        for tax in tax_response.data:
-            try:
-                tax_rate = float(tax.get("Per_cent", 0)) if tax.get("Per_cent") is not None else 0.0
-                tax_desc = tax.get("Type", "Tax")
-                city = tax.get("City", "")
-                basis = tax.get("Basis", "")
-                
-                # Add city info to description if available
-                if city:
-                    tax_desc = f"{tax_desc} ({city})"
-                
-                # Calculate tax amount based on percentage
-                amount = subtotal * (tax_rate / 100)
-                tax_amount += amount
-                tax_breakdown.append({
-                    "Description": f"{tax_desc} ({tax_rate}%)",
-                    "Amount": amount
-                })
-            except (ValueError, TypeError) as e:
-                st.warning(f"Error processing tax: {str(e)}")
+        # Check if tax data exists for this schedule
+        if tax_response.data and len(tax_response.data) > 0:
+            # Use tax data from database
+            for tax in tax_response.data:
+                try:
+                    tax_rate = float(tax.get("Per_cent", 0)) if tax.get("Per_cent") is not None else 0.0
+                    tax_desc = tax.get("Type", "Tax")
+                    city = tax.get("City", "")
+                    basis = tax.get("Basis", "")
+                    
+                    # Add city info to description if available
+                    if city:
+                        tax_desc = f"{tax_desc} ({city})"
+                    
+                    # Calculate tax amount based on percentage
+                    amount = subtotal * (tax_rate / 100)
+                    tax_amount += amount
+                    tax_breakdown.append({
+                        "Description": f"{tax_desc} ({tax_rate}%)",
+                        "Amount": amount
+                    })
+                except (ValueError, TypeError) as e:
+                    st.warning(f"Error processing tax: {str(e)}")
+        else:
+            # No tax data found, use default 6% tax rate
+            default_tax_rate = 6.0
+            default_tax_amount = subtotal * (default_tax_rate / 100)
+            tax_amount = default_tax_amount
+            tax_breakdown.append({
+                "Description": f"Default Tax Rate ({default_tax_rate}%)",
+                "Amount": default_tax_amount
+            })
+            using_default_tax = True
+            
     except Exception as e:
         st.warning(f"Error calculating taxes: {str(e)}")
+        # Fall back to default tax rate if there's an error
+        default_tax_rate = 6.0
+        default_tax_amount = subtotal * (default_tax_rate / 100)
+        tax_amount = default_tax_amount
+        tax_breakdown.append({
+            "Description": f"Default Tax Rate ({default_tax_rate}%)",
+            "Amount": default_tax_amount
+        })
+        using_default_tax = True
     
-    return tax_amount, tax_breakdown
+    return tax_amount, tax_breakdown, using_default_tax
 
 def create_bill_dataframe(service_charge_breakdown, energy_charges_breakdown, demand_charges_breakdown, 
                          other_charges_breakdown, subtotal, tax_breakdown, total_bill,
