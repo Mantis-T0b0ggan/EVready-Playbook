@@ -80,6 +80,7 @@ def calculate_bill(supabase, schedule_id, schedule_name, usage_kwh, demand_kw, p
     demand_charge = 0.0
     other_charges = 0.0
     tax_amount = 0.0
+    using_default_tax = False
     
     try:
         # 1. Get service charges
@@ -250,8 +251,7 @@ def calculate_bill(supabase, schedule_id, schedule_name, usage_kwh, demand_kw, p
         
         # 5. Calculate taxes
         subtotal = service_charge + energy_charge + demand_charge + other_charges
-    
-    try:
+        
         # Check if tax data exists for this schedule
         tax_response = supabase.from_("TaxInfo_Table").select("Per_cent").eq("ScheduleID", schedule_id).execute()
         
@@ -267,13 +267,19 @@ def calculate_bill(supabase, schedule_id, schedule_name, usage_kwh, demand_kw, p
             # No tax data found, use default 6% tax rate
             default_tax_rate = 6.0
             tax_amount = subtotal * (default_tax_rate / 100)
-    except Exception:
-        # Fall back to default tax rate if there's an error
+            using_default_tax = True
+        
+        # Calculate total bill
+        total_bill = subtotal + tax_amount
+        
+    except Exception as e:
+        st.warning(f"Error calculating bill for schedule {schedule_id}: {str(e)}")
+        # If there's an error, still try to calculate with default tax rate
+        subtotal = service_charge + energy_charge + demand_charge + other_charges
         default_tax_rate = 6.0
         tax_amount = subtotal * (default_tax_rate / 100)
-    
-    # Calculate total bill
-    total_bill = subtotal + tax_amount
+        total_bill = subtotal + tax_amount
+        using_default_tax = True
     
     # Create breakdown dictionary
     breakdown = {
@@ -282,7 +288,8 @@ def calculate_bill(supabase, schedule_id, schedule_name, usage_kwh, demand_kw, p
         'demand_charge': demand_charge,
         'other_charges': other_charges,
         'tax_amount': tax_amount,
-        'total': total_bill
+        'total': total_bill,
+        'using_default_tax': using_default_tax
     }
     
     # Return the bill results
