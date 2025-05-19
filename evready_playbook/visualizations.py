@@ -231,7 +231,7 @@ def create_cost_breakdown_comparison(comparison_results):
     return fig
 
 def create_bill_breakdown_chart(bill_breakdown):
-    """Create a more reliable pie chart visualization for bill components."""
+    """Create a simplified, clean pie chart with labels."""
     # Prepare data for pie chart
     chart_data = {
         'Category': [],
@@ -268,96 +268,49 @@ def create_bill_breakdown_chart(bill_breakdown):
     # Calculate percentages
     chart_df['Percentage'] = chart_df['Amount'] / total * 100
     
-    # Sort by amount (largest first) for consistent appearance
-    chart_df = chart_df.sort_values('Amount', ascending=False)
+    # Create a clean, readable color palette
+    colors = ['#4285F4', '#EA4335', '#34A853', '#FBBC05', '#8C9EFF']
     
-    # Create a more professional and accessible color palette
-    colors = ['#3574C3', '#FF9E4A', '#7BC372', '#E66C67', '#9D7AC8']
-    
-    # Create figure with more space for annotations
-    fig, ax = plt.subplots(figsize=(8, 6.5), facecolor='white')
+    # Create figure
+    fig, ax = plt.subplots(figsize=(7, 6), facecolor='white')
     
     # Create pie chart
-    wedges, _ = ax.pie(
+    patches, texts, autotexts = ax.pie(
         chart_df['Amount'], 
-        labels=None,  # We'll add custom labels
+        labels=chart_df['Category'],
+        autopct='%1.1f%%',
         colors=colors[:len(chart_df)],
         startangle=90,
-        wedgeprops={'edgecolor': 'white', 'linewidth': 1.5, 'antialiased': True},
+        wedgeprops={'edgecolor': 'white', 'linewidth': 1.5},
+        textprops={'fontsize': 12, 'fontweight': 'bold'},
         shadow=False
     )
     
-    # Add percentage labels inside the pie for all segments
-    for i, wedge in enumerate(wedges):
-        percentage = chart_df.iloc[i]['Percentage']
-        ang = (wedge.theta2 - wedge.theta1) / 2. + wedge.theta1
-        
-        # For all segments, determine appropriate label position and size
-        if percentage > 3:
-            # Large segments - add label inside
-            x = np.cos(np.deg2rad(ang)) * 0.5
-            y = np.sin(np.deg2rad(ang)) * 0.5
-            ax.text(x, y, f"{percentage:.1f}%", 
-                   ha='center', va='center', 
-                   fontweight='bold', color='white', fontsize=11)
+    # Make percentage labels white and bold for better contrast
+    for autotext in autotexts:
+        autotext.set_color('white')
+        autotext.set_fontweight('bold')
     
-    # Add consistent external labels with dollar amounts for ALL segments
-    for i, wedge in enumerate(wedges):
-        category = chart_df.iloc[i]['Category']
-        amount = chart_df.iloc[i]['Amount']
-        percentage = chart_df.iloc[i]['Percentage']
-        
-        ang = (wedge.theta2 - wedge.theta1) / 2. + wedge.theta1
-        
-        # Get coordinates on the pie circumference
-        # Use radius factor of 0.7 to be positioned closer to the edge of the pie
-        x = np.cos(np.deg2rad(ang)) * 0.7
-        y = np.sin(np.deg2rad(ang)) * 0.7
-        
-        # Position the text based on quadrant to ensure proper spacing
-        if 0 <= ang < 90:  # Upper right quadrant
-            xytext = (1.2, 0.4 + i*0.15)  # Adjust vertical position based on index
-            ha = "left"
-        elif 90 <= ang < 180:  # Lower right quadrant
-            xytext = (1.2, -0.4 - i*0.15)
-            ha = "left"
-        elif 180 <= ang < 270:  # Lower left quadrant
-            xytext = (-1.2, -0.4 - i*0.15)
-            ha = "right"
-        else:  # Upper left quadrant
-            xytext = (-1.2, 0.4 + i*0.15)
-            ha = "right"
-        
-        # Draw line to the label
-        ax.annotate(
-            category,
-            xy=(x, y), 
-            xytext=xytext,
-            textcoords='axes fraction',
-            horizontalalignment=ha,
-            verticalalignment='center',
-            arrowprops=dict(arrowstyle="-", color='gray', lw=1),
-            fontsize=12, fontweight='bold'
-        )
-        
-        # Add dollar amount below the category name
-        dollar_y_offset = 0.1  # Reduced offset for better spacing
-        ax.annotate(
-            f"${amount:,.2f}",
-            xy=(xytext[0], xytext[1] - dollar_y_offset),
-            xycoords='axes fraction',
-            horizontalalignment=ha,
-            verticalalignment='center',
-            fontsize=10, fontweight='normal', color='#444444'
-        )
+    # Add a legend with dollar amounts
+    legend_labels = [f"{cat} (${amt:,.2f})" for cat, amt in zip(chart_df['Category'], chart_df['Amount'])]
+    ax.legend(
+        patches, 
+        legend_labels, 
+        loc='center left', 
+        bbox_to_anchor=(0.0, 0.5),
+        fontsize=10,
+        frameon=True,
+        edgecolor='lightgray',
+        facecolor='white'
+    )
     
     # Equal aspect ratio ensures that pie is drawn as a circle
     ax.axis('equal')
     
-    # Add title with better styling
-    plt.title('Bill Composition', fontsize=20, fontweight='bold', pad=15)
+    # Add title
+    plt.title('Bill Composition', fontsize=18, fontweight='bold', pad=15)
     
-    # Add total at the bottom with improved styling
+    # Add total at the bottom
     plt.annotate(
         f"Total Bill: ${total:,.2f}",
         xy=(0.5, -0.1),
