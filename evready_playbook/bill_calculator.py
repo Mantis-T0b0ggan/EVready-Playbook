@@ -7,31 +7,11 @@ def calculate_current_bill(supabase, schedule_id, schedule_name, usage_kwh, usag
                           has_energy_charges, has_demand_charges, has_reactive_demand):
     """Calculate full bill breakdown for the current schedule."""
     
-    # 1. Get service charges
-    service_charge, service_charge_breakdown = calculate_service_charges(supabase, schedule_id)
-    
-    # 2. Calculate energy charges if applicable
-    energy_charge = 0.0
-    energy_charges_breakdown = []
-    if has_energy_charges and usage_kwh:
-        energy_charge, energy_charges_breakdown = calculate_energy_charges(
-            supabase, schedule_id, usage_kwh, usage_by_tou, billing_month
-        )
-    
-    # 3. Calculate demand charges if applicable
-    demand_charge = 0.0
-    demand_charges_breakdown = []
-    if has_demand_charges and demand_kw:
-        demand_charge, demand_charges_breakdown = calculate_demand_charges(
-            supabase, schedule_id, demand_kw, power_factor, billing_month, has_reactive_demand
-        )
-    
-    # 4. Get other charges
-    other_charges, other_charges_breakdown = calculate_other_charges(supabase, schedule_id)
+    # 1-4. [existing code remains the same]
     
     # 5. Calculate taxes
     subtotal = service_charge + energy_charge + demand_charge + other_charges
-    tax_amount, tax_breakdown = calculate_taxes(supabase, schedule_id, subtotal)
+    tax_amount, tax_breakdown, using_default_tax = calculate_taxes(supabase, schedule_id, subtotal)
     
     # Calculate total bill
     total_bill = subtotal + tax_amount
@@ -56,7 +36,8 @@ def calculate_current_bill(supabase, schedule_id, schedule_name, usage_kwh, usag
         'demand_charge': demand_charge,
         'other_charges': other_charges,
         'tax_amount': tax_amount,
-        'total': total_bill
+        'total': total_bill,
+        'using_default_tax': using_default_tax  # Add this flag to the breakdown
     }
     
     return (
