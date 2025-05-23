@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from database_connection import get_states_with_utilities, get_utilities_by_state, get_schedules_by_utility
 
-def create_dcfc_inputs():
+def create_dcfc_inputs(supabase):
     """Create input forms for DCFC payback model."""
     st.header("DC Fast Charging Payback Model")
     st.markdown("Analyze the return on investment for DC Fast Charging infrastructure")
@@ -22,7 +22,7 @@ def create_dcfc_inputs():
         create_model_parameters_section()
         create_driver_pricing_section()
         create_other_parameters_section()
-        create_utility_selection_section()
+        create_utility_selection_section(supabase)
     
     # Additional sections in full width
     create_gas_equivalent_section()
@@ -35,10 +35,6 @@ def initialize_dcfc_session_state():
     if 'dcfc_equipment' not in st.session_state:
         st.session_state.dcfc_equipment = [
             {'name': 'Charger', 'msrp': 0.0, 'quantity': 0},
-            {'name': 'Charger Component 1', 'msrp': 0.0, 'quantity': 0},
-            {'name': 'Charger Component 2', 'msrp': 0.0, 'quantity': 0},
-            {'name': '2nd Charger', 'msrp': 0.0, 'quantity': 0},
-            {'name': '3rd Charger', 'msrp': 0.0, 'quantity': 0},
             {'name': 'Network', 'msrp': 0.0, 'quantity': 0},
             {'name': 'Maintenance', 'msrp': 0.0, 'quantity': 0}
         ]
@@ -254,12 +250,25 @@ def create_model_parameters_section():
         key="dcfc_first_year_kwh_input"
     )
     
-    st.session_state.dcfc_state_code = st.text_input(
-        "State (Two Letter Code)",
-        value=st.session_state.dcfc_state_code,
-        max_chars=2,
-        key="dcfc_state_code_input"
-    ).upper()
+    # US States dropdown
+    us_states = [
+        "", "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", 
+        "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", 
+        "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", 
+        "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", 
+        "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"
+    ]
+    
+    state_index = 0
+    if st.session_state.dcfc_state_code in us_states:
+        state_index = us_states.index(st.session_state.dcfc_state_code)
+    
+    st.session_state.dcfc_state_code = st.selectbox(
+        "State",
+        options=us_states,
+        index=state_index,
+        key="dcfc_state_code_select"
+    )
     
     st.session_state.dcfc_exchange_rate = st.number_input(
         "Exchange Rate",
@@ -332,33 +341,96 @@ def create_other_parameters_section():
         key="dcfc_other_revenue_year_input"
     )
 
-def create_utility_selection_section():
+def create_utility_selection_section(supabase):
     """Create utility selection section using existing database functions."""
     st.subheader("Utility Rate Selection")
     
-    # Note: This will need to be connected to the supabase instance
-    # For now, we'll create placeholder inputs that match the structure
+    # Get states that have utilities with schedules
+    try:
+        states = get_states_with_utilities(supabase)
+        
+        if not states:
+            st.warning("No states with utilities and rate schedules found in the database.")
+            return
+        
+        # State selection
+        state_index = 0
+        if st.session_state.dcfc_selected_state in states:
+            state_index = states.index(st.session_state.dcfc_selected_state) + 1
+        
+        st.session_state.dcfc_selected_state = st.selectbox(
+            "Select State for Utility Rates",
+            options=[""] + states,
+            index=state_index,
+            key="dcfc_utility_state_select"
+        )
+        
+        # Utility selection
+        if st.session_state.dcfc_selected_state:
+            utilities_data = get_utilities_by_state(supabase, st.session_state.dcfc_selected_state)
+            
+            if utilities_data:
+                # Create utility options
+                utility_options = {utility["UtilityName"]: utility["UtilityID"] for utility in utilities_data}
+                utility_names = sorted(list(utility_options.keys()))
+                
+                utility_index = 0
+                if st.session_state.dcfc_selected_utility in utility_names:
+                    utility_index = utility_names.index(st.session_state.dcfc_selected_utility) + 1
+                
+                st.session_state.dcfc_selected_utility = st.selectbox(
+                    "Select Utility",
+                    options=[""] + utility_names,
+                    index=utility_index,
+                    key="dcfc_utility_select"
+                )
+                
+                # Store utility ID for schedule lookup
+                if st.session_state.dcfc_selected_utility:
+                    st.session_state.dcfc_selected_utility_id = utility_options[st.session_state.dcfc_selected_utility]
+                
+                # Schedule selection
+                if st.session_state.dcfc_selected_utility:
+                    utility_id = utility_options[st.session_state.dcfc_selected_utility]
+                    schedules_data = get_schedules_by_utility(supabase, utility_id)
+                    
+                    if schedules_data:
+                        # Format schedule options
+                        schedule_options = {}
+                        for schedule in schedules_data:
+                            name = schedule.get("ScheduleName", "")
+                            desc = schedule.get("ScheduleDescription", "")
+                            
+                            if desc:
+                                display_text = f"{name} - {desc}"
+                            else:
+                                display_text = name
+                            
+                            schedule_options[display_text] = schedule.get("ScheduleID")
+                        
+                        schedule_names = sorted(list(schedule_options.keys()))
+                        
+                        schedule_index = 0
+                        if st.session_state.dcfc_selected_schedule in schedule_names:
+                            schedule_index = schedule_names.index(st.session_state.dcfc_selected_schedule) + 1
+                        
+                        st.session_state.dcfc_selected_schedule = st.selectbox(
+                            "Select Rate Schedule",
+                            options=[""] + schedule_names,
+                            index=schedule_index,
+                            key="dcfc_schedule_select"
+                        )
+                        
+                        # Store schedule ID
+                        if st.session_state.dcfc_selected_schedule:
+                            st.session_state.dcfc_selected_schedule_id = schedule_options[st.session_state.dcfc_selected_schedule]
+                    else:
+                        st.warning("No rate schedules found for the selected utility.")
+            else:
+                st.warning(f"No utilities with rate schedules found in {st.session_state.dcfc_selected_state}.")
     
-    st.session_state.dcfc_selected_state = st.selectbox(
-        "Select State",
-        options=[""] + ["CA", "OR", "WA", "TX", "NY"],  # Placeholder - should use get_states_with_utilities
-        index=0,
-        key="dcfc_state_select"
-    )
-    
-    st.session_state.dcfc_selected_utility = st.selectbox(
-        "Select Utility",
-        options=[""] + ["PG&E", "SCE", "SDGE"],  # Placeholder - should use get_utilities_by_state
-        index=0,
-        key="dcfc_utility_select"
-    )
-    
-    st.session_state.dcfc_selected_schedule = st.selectbox(
-        "Select Rate Schedule",
-        options=[""] + ["TOU-EV", "EV-TOU", "Schedule E-TOU"],  # Placeholder - should use get_schedules_by_utility
-        index=0,
-        key="dcfc_schedule_select"
-    )
+    except Exception as e:
+        st.error(f"Error loading utility data: {str(e)}")
 
 def create_gas_equivalent_section():
     """Create gas equivalent assumptions section."""
