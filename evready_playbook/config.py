@@ -5,7 +5,7 @@ def configure_page():
     # Configure page settings
     st.set_page_config(
         page_title="EVready Playbook",
-        page_icon=logo.png,
+        page_icon="⚡",
         layout="wide", 
         initial_sidebar_state="expanded"
     )
