@@ -12,6 +12,7 @@ from visualizations import (
     create_cost_breakdown_comparison
 )
 from ui_components import display_bill_results, create_usage_inputs, display_comparison_results
+from dcfc_payback_model import create_dcfc_inputs, display_dcfc_results
 
 def main():
     """Main application entry point."""
@@ -32,7 +33,8 @@ def main():
             st.warning("Note: Company logo could not be loaded. Please ensure logo.png exists in the app directory.")
     
     # Title centered on the page
-    st.markdown("<h1 style='text-align: center; margin-top: 1.5rem;'>Utility Rate Analysis Tool</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; margin-top: 1.5rem;'>EVready Playbook</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; margin-bottom: 2rem; color: #666;'>Comprehensive Utility Rate Analysis & EV Infrastructure Planning</p>", unsafe_allow_html=True)
     
     # Add reset button at the top of the app
     col1, col2 = st.columns([6, 1])
@@ -44,7 +46,7 @@ def main():
             st.experimental_rerun()
     
     # Create tabs for different functionalities
-    tab1, tab2 = st.tabs(["Bill Estimation & Comparison", "Schedule Browser"])
+    tab1, tab2, tab3 = st.tabs(["Bill Estimation & Comparison", "Schedule Browser", "DCFC Payback Model"])
     
     # Tab 1: Bill Estimation Tool
     with tab1:
@@ -99,6 +101,25 @@ def main():
             
             if st.button("Calculate Bill Estimate", key="calculate_bill_tab2"):
                 st.info("Schedule browser functionality will be implemented in a future update. Please use the 'Bill Estimation & Comparison' tab for now.")
+    
+    # Tab 3: DCFC Payback Model
+    with tab3:
+        # Create the DCFC input forms
+        create_dcfc_inputs()
+        
+        # Add calculate button
+        st.markdown("---")
+        col1, col2 = st.columns([1, 5])
+        with col1:
+            if st.button("Calculate Payback", key="calculate_dcfc_payback"):
+                # For now, just display the placeholder results
+                # Later we'll implement actual calculations
+                display_dcfc_results()
+                st.success("DCFC payback calculations completed! (Note: This is currently showing placeholder data)")
+        
+        # Display results if they exist in session state
+        if st.session_state.get('dcfc_calculated', False):
+            display_dcfc_results()
 
 
 def select_state(supabase, tab_key):
