@@ -105,7 +105,7 @@ def main():
     # Tab 3: DCFC Payback Model
     with tab3:
         # Create the DCFC input forms
-        create_dcfc_inputs()
+        create_dcfc_inputs(supabase)
         
         # Add calculate button
         st.markdown("---")
